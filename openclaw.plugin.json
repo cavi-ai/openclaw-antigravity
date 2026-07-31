@@ -1,0 +1,33 @@
+{
+  "id": "antigravity",
+  "name": "Antigravity CLI",
+  "version": "0.1.0",
+  "description": "Runs Google's Antigravity CLI (agy) as a subscription-backed model provider.",
+  "enabledByDefault": false,
+  "kind": ["provider"],
+  "activation": {
+    "onStartup": false,
+    "onProviders": ["antigravity-cli"]
+  },
+  "providers": ["antigravity-cli"],
+  "cliBackends": ["antigravity-cli"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "command": {
+        "type": "string",
+        "description": "Path to the agy binary. Defaults to `agy` on PATH."
+      },
+      "mode": {
+        "type": "string",
+        "description": "agy --mode value for print-mode runs, or \"none\" to omit the flag.",
+        "enum": ["accept-edits", "plan", "none"]
+      },
+      "skipPermissions": {
+        "type": "boolean",
+        "description": "Pass --dangerously-skip-permissions. Off by default."
+      }
+    }
+  }
+}

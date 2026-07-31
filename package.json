@@ -1,0 +1,46 @@
+{
+  "name": "openclaw-antigravity",
+  "version": "0.1.0",
+  "description": "Runs Google's Antigravity CLI (agy) as a subscription-backed OpenClaw model provider.",
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "antigravity",
+    "agy",
+    "gemini",
+    "llm"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sasan1200/openclaw-antigravity.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sasan1200/openclaw-antigravity/issues"
+  },
+  "homepage": "https://github.com/sasan1200/openclaw-antigravity#readme",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "openclaw.plugin.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "openclaw": {
+    "extensions": ["./src/index.js"],
+    "runtimeExtensions": ["./src/index.js"],
+    "compat": {
+      "pluginApi": ">=2026.7"
+    }
+  },
+  "scripts": {
+    "test": "node --test 'test/*.test.mjs'"
+  }
+}
