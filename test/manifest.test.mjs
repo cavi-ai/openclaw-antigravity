@@ -14,6 +14,7 @@ const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 test("manifest omits invalid PluginKind and owns antigravity-cli", () => {
   assert.equal(manifest.id, "antigravity");
   assert.equal(manifest.kind, undefined);
+  assert.equal(manifest.activation.onStartup, true);
   assert.deepEqual(manifest.providers, ["antigravity-cli"]);
   assert.deepEqual(manifest.cliBackends, ["antigravity-cli"]);
   assert.deepEqual(manifest.syntheticAuthRefs, ["antigravity-cli"]);
@@ -21,7 +22,6 @@ test("manifest omits invalid PluginKind and owns antigravity-cli", () => {
   assert.deepEqual(manifest.setup.cliBackends, ["antigravity-cli"]);
   assert.equal(manifest.setup.providers[0].id, "antigravity-cli");
 });
-
 test("manifest exposes a concrete CLI auth choice for onboarding", () => {
   const choice = manifest.providerAuthChoices[0];
   assert.equal(choice.provider, "antigravity-cli");

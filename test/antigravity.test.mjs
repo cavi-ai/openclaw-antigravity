@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAntigravityCliBackend } from "../src/cli-backend.js";
 import {
+  ANTIGRAVITY_BASE_URL,
+  ANTIGRAVITY_MODEL_API,
   ANTIGRAVITY_MODEL_IDS,
   buildAntigravityModelCatalog,
   labelForModelId,
@@ -64,6 +66,17 @@ test("provider catalog covers every listed agy model", async () => {
   const ids = result.provider.models.map((model) => model.id);
   assert.deepEqual(ids, ANTIGRAVITY_MODEL_IDS);
   assert.equal(result.provider.defaultModel, "gemini-3.1-pro-high");
+  assert.equal(result.provider.baseUrl, ANTIGRAVITY_BASE_URL);
+  assert.equal(result.provider.api, ANTIGRAVITY_MODEL_API);
+  for (const model of result.provider.models) {
+    assert.equal(model.api, ANTIGRAVITY_MODEL_API);
+  }
+});
+
+test("dynamic models carry required catalog shape fields", () => {
+  const model = buildAntigravityProvider().resolveDynamicModel({ modelId: "gemini-4-pro-high" });
+  assert.equal(model.baseUrl, ANTIGRAVITY_BASE_URL);
+  assert.equal(model.api, ANTIGRAVITY_MODEL_API);
 });
 
 test("catalog reports zero per-token cost because Antigravity bills by subscription", () => {
