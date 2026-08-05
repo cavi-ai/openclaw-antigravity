@@ -49,6 +49,16 @@ test("provider carries no auth because agy holds the Antigravity session", () =>
   assert.deepEqual(provider.envVars, []);
 });
 
+test("missing-auth guidance points at agy login, not an OpenClaw API key", () => {
+  const provider = buildAntigravityProvider();
+  const message = provider.buildMissingAuthMessage();
+  const hint = provider.buildAuthDoctorHint();
+  assert.match(message, /agy/i);
+  assert.match(message, /Antigravity/i);
+  assert.doesNotMatch(message, /paste.*api key/i);
+  assert.equal(hint, message);
+});
+
 test("provider catalog covers every listed agy model", async () => {
   const result = await buildAntigravityProvider().staticCatalog.run();
   const ids = result.provider.models.map((model) => model.id);

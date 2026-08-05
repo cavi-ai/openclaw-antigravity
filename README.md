@@ -4,8 +4,11 @@ An [OpenClaw](https://github.com/openclaw/openclaw) plugin that runs Google's
 Antigravity CLI (`agy`) as a model provider.
 
 Google is [retiring Gemini CLI in favour of Antigravity CLI][transition]. OpenClaw
-ships a `google-gemini-cli` provider; this plugin fills the same slot with `agy`,
-so a Google subscription keeps working after that migration.
+ships a `google-gemini-cli` provider; this plugin fills the same *CLI subscription*
+slot with `agy`, so a Google subscription keeps working after that migration.
+
+This is an **external** plugin (`antigravity` / `antigravity-cli`). It is not the
+bundled OpenClaw provider id `google-antigravity`.
 
 Inference and authentication stay inside `agy`. The plugin stores no API key: it
 drives `agy --print` and reads the JSON result, the same shape as OpenClaw's other
@@ -17,12 +20,21 @@ CLI backends.
 
 - OpenClaw `2026.7` or newer
 - Node.js 20+
-- Antigravity CLI on `PATH`, already signed in — check with `agy models`
+- Antigravity CLI on `PATH` (or configured via `command`), already signed in —
+  check with `agy models`. Prefer an absolute path for `command` after install.
 
 ## Install
 
 ```bash
 openclaw plugins install openclaw-antigravity
+```
+
+Or from npm / ClawHub once published:
+
+```bash
+npm install -g openclaw-antigravity
+# or
+clawhub package publish  # maintainers; see Publishing below
 ```
 
 Then enable it:
@@ -31,8 +43,22 @@ Then enable it:
 openclaw config set plugins.entries.antigravity.enabled true
 ```
 
+Restart the Gateway after install/enable so plugin discovery reloads.
+
 If your `plugins` config is stored through a `$include`, edit the included file
 directly — `openclaw plugins install` refuses to write through that shape.
+
+### Recognition checklist
+
+After install + enable + Gateway restart you should see:
+
+1. **Plugin list** — entry `antigravity` / Antigravity CLI
+2. **Providers / onboarding** — Antigravity CLI (`antigravity-cli`) with a CLI login choice
+3. **Doctor** — diagnostics that name this provider when `agy` is missing or unsigned-in
+4. **Model use** — `antigravity-cli/<model>` runs when `agy models` succeeds
+
+If the plugin is invisible, doctor cannot repair it — fix discovery first (install
+path, enable flag, Gateway restart), not model config.
 
 ## Use
 
@@ -74,9 +100,9 @@ All keys live under `plugins.entries.antigravity.config` and are optional.
 
 | Key | Default | Purpose |
 | --- | --- | --- |
-| `command` | `agy` | Path to the `agy` binary when it is not on `PATH`. |
+| `command` | `agy` | Path to the `agy` binary. Prefer an absolute path; do not pass shell metacharacters. |
 | `mode` | `accept-edits` | Value for `agy --mode`, or `none` to omit the flag. |
-| `skipPermissions` | `false` | Pass `--dangerously-skip-permissions`. |
+| `skipPermissions` | `false` | Pass `--dangerously-skip-permissions`. Off by default — only enable if you accept tool runs without agy permission prompts. |
 
 `mode` defaults to `accept-edits` because `agy --print` cannot prompt a human:
 under the default review mode, tool calls wait for an approval that never
@@ -109,11 +135,37 @@ this plugin uses `--output-format json` and stays core-compatible.
   per-model limits for the CLI; the values in `src/models.js` exist so OpenClaw
   budgets sanely and can be raised if `agy` is observed accepting more.
 
+## Publishing
+
+Maintainers:
+
+```bash
+npm test
+npm publish
+clawhub package publish --dry-run
+clawhub package publish
+```
+
+Consumers should pin a version and verify package integrity from the registry
+(npm integrity / ClawHub publisher identity) before enabling on a Gateway host.
+
 ## Development
 
 ```bash
 npm test
 ```
+
+Local Gateway sync (optional): `scripts/sync-to-openclaw.sh` copies into the
+OpenClaw extensions directory and restarts the Gateway. Prefer
+`openclaw plugins install` for paths that match production discovery.
+
+### Manual smoke (release)
+
+1. Install + enable + restart Gateway
+2. Plugin list shows `antigravity`
+3. Providers / onboarding show Antigravity CLI
+4. Doctor names the provider when `agy` is missing or unsigned-in
+5. `openclaw agent --model antigravity-cli/gemini-3.1-pro-high -m "hello"` succeeds when `agy` is healthy
 
 ## License
 

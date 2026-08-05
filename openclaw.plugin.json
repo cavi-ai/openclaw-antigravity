@@ -4,20 +4,57 @@
   "version": "0.1.0",
   "description": "Runs Google's Antigravity CLI (agy) as a subscription-backed model provider.",
   "enabledByDefault": false,
-  "kind": ["provider"],
   "activation": {
-    "onStartup": false,
+    "onStartup": true,
     "onProviders": ["antigravity-cli"]
   },
   "providers": ["antigravity-cli"],
   "cliBackends": ["antigravity-cli"],
+  "autoEnableWhenConfiguredProviders": ["antigravity-cli"],
+  "syntheticAuthRefs": ["antigravity-cli"],
+  "setup": {
+    "providers": [
+      {
+        "id": "antigravity-cli"
+      }
+    ],
+    "cliBackends": ["antigravity-cli"]
+  },
+  "providerAuthChoices": [
+    {
+      "provider": "antigravity-cli",
+      "method": "cli",
+      "choiceId": "antigravity-cli",
+      "choiceLabel": "Antigravity CLI",
+      "choiceHint": "Use an existing Antigravity CLI (agy) login on this host. Run `agy models` to confirm.",
+      "groupId": "antigravity",
+      "groupLabel": "Antigravity",
+      "groupHint": "Subscription-backed models via agy",
+      "onboardingFeatured": true
+    }
+  ],
+  "uiHints": {
+    "command": {
+      "label": "agy binary",
+      "help": "Path to the agy executable. Prefer an absolute path after install; default `agy` resolves via PATH.",
+      "placeholder": "agy"
+    },
+    "mode": {
+      "label": "agy mode",
+      "help": "Value for `agy --mode` on print-mode runs, or `none` to omit the flag."
+    },
+    "skipPermissions": {
+      "label": "Skip permissions",
+      "help": "Passes --dangerously-skip-permissions to agy. Off by default. Only enable if you accept tool runs without agy permission prompts."
+    }
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {
       "command": {
         "type": "string",
-        "description": "Path to the agy binary. Defaults to `agy` on PATH."
+        "description": "Path to the agy binary. Defaults to `agy` on PATH. Prefer an absolute path; do not pass shell metacharacters."
       },
       "mode": {
         "type": "string",
