@@ -1,4 +1,4 @@
-# openclaw-antigravity
+# @cavi-ai/antigravity
 
 An [OpenClaw](https://github.com/openclaw/openclaw) plugin that runs Google's
 Antigravity CLI (`agy`) as a model provider.
@@ -9,6 +9,10 @@ slot with `agy`, so a Google subscription keeps working after that migration.
 
 This is an **external** plugin (`antigravity` / `antigravity-cli`). It is not the
 bundled OpenClaw provider id `google-antigravity`.
+
+> **npm name:** publish as `@cavi-ai/antigravity`. The unscoped name
+> `openclaw-antigravity` on npm is a different package and must not be used for
+> this repo.
 
 Inference and authentication stay inside `agy`. The plugin stores no API key: it
 drives `agy --print` and reads the JSON result, the same shape as OpenClaw's other
@@ -26,15 +30,13 @@ CLI backends.
 ## Install
 
 ```bash
-openclaw plugins install openclaw-antigravity
+openclaw plugins install @cavi-ai/antigravity
 ```
 
-Or from npm / ClawHub once published:
+Or:
 
 ```bash
-npm install -g openclaw-antigravity
-# or
-clawhub package publish  # maintainers; see Publishing below
+npm install -g @cavi-ai/antigravity
 ```
 
 Then enable it:
@@ -137,17 +139,25 @@ this plugin uses `--output-format json` and stays core-compatible.
 
 ## Publishing
 
-Maintainers:
+Maintainers (requires npm auth with publish rights on `@cavi-ai`):
 
 ```bash
 npm test
-npm publish
+npm publish --access public
+# optional
 clawhub package publish --dry-run
 clawhub package publish
 ```
 
+Tag after publish:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 Consumers should pin a version and verify package integrity from the registry
-(npm integrity / ClawHub publisher identity) before enabling on a Gateway host.
+before enabling on a Gateway host.
 
 ## Development
 
@@ -157,7 +167,8 @@ npm test
 
 Local Gateway sync (optional): `scripts/sync-to-openclaw.sh` copies into the
 OpenClaw extensions directory and restarts the Gateway. Prefer
-`openclaw plugins install` for paths that match production discovery.
+`openclaw plugins install @cavi-ai/antigravity` for paths that match production
+discovery.
 
 ### Manual smoke (release)
 

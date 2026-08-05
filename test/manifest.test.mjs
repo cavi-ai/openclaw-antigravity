@@ -41,7 +41,9 @@ test("package.json is ClawHub-ready and ships setup/doctor modules", () => {
   assert.ok(pkg.openclaw.compat.minGatewayVersion);
   assert.ok(pkg.openclaw.build.openclawVersion);
   assert.ok(pkg.openclaw.build.pluginSdkVersion);
-  assert.equal(pkg.openclaw.install.npmSpec, "openclaw-antigravity");
+  assert.equal(pkg.name, "@cavi-ai/antigravity");
+  assert.equal(pkg.openclaw.install.npmSpec, "@cavi-ai/antigravity");
+  assert.equal(pkg.openclaw.install.minHostVersion, ">=2026.7.0");
   assert.ok(pkg.files.includes("setup-api.js"));
   assert.ok(pkg.files.includes("doctor-contract-api.js"));
   assert.ok(pkg.files.includes("openclaw.plugin.json"));
