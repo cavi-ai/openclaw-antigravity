@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-antigravity",
+  "name": "@cavi-ai/antigravity",
   "version": "0.1.0",
   "description": "Runs Google's Antigravity CLI (agy) as a subscription-backed OpenClaw model provider.",
   "keywords": [
@@ -13,12 +13,15 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sasan1200/openclaw-antigravity.git"
+    "url": "git+https://github.com/cavi-ai/openclaw-antigravity.git"
   },
   "bugs": {
-    "url": "https://github.com/sasan1200/openclaw-antigravity/issues"
+    "url": "https://github.com/cavi-ai/openclaw-antigravity/issues"
   },
-  "homepage": "https://github.com/sasan1200/openclaw-antigravity#readme",
+  "homepage": "https://github.com/cavi-ai/openclaw-antigravity#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./src/index.js",
   "exports": {
@@ -26,21 +29,41 @@
   },
   "files": [
     "src",
+    "setup-api.js",
+    "doctor-contract-api.js",
     "openclaw.plugin.json",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
     "node": ">=20"
   },
+  "peerDependencies": {
+    "openclaw": ">=2026.7.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
   "openclaw": {
     "extensions": ["./src/index.js"],
     "runtimeExtensions": ["./src/index.js"],
+    "install": {
+      "npmSpec": "@cavi-ai/antigravity",
+      "minHostVersion": ">=2026.7.0"
+    },
     "compat": {
-      "pluginApi": ">=2026.7"
+      "pluginApi": ">=2026.7",
+      "minGatewayVersion": "2026.7.0"
+    },
+    "build": {
+      "openclawVersion": "2026.7.0",
+      "pluginSdkVersion": "2026.7.0"
     }
   },
   "scripts": {
-    "test": "node --test 'test/*.test.mjs'"
+    "test": "node --test test/*.test.mjs"
   }
 }

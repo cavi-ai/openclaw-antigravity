@@ -5,12 +5,17 @@
 // on the gemini CLI's own credentials. OpenClaw stores no key for this provider.
 import { ANTIGRAVITY_BACKEND_ID } from "./cli-backend.js";
 import {
+  ANTIGRAVITY_BASE_URL,
   ANTIGRAVITY_DEFAULT_MODEL,
   ANTIGRAVITY_MODEL_ALIASES,
+  ANTIGRAVITY_MODEL_API,
   buildAntigravityModelCatalog,
 } from "./models.js";
 
 export const ANTIGRAVITY_PROVIDER_ID = ANTIGRAVITY_BACKEND_ID;
+
+const MISSING_AUTH_MESSAGE =
+  "Antigravity CLI is not ready. Install Google's Antigravity CLI (`agy`), sign in with your Google subscription, then confirm with `agy models`. This provider stores no API key in OpenClaw.";
 
 export function buildAntigravityProvider() {
   return {
@@ -19,11 +24,18 @@ export function buildAntigravityProvider() {
     aliases: ["antigravity", "agy"],
     envVars: [],
     auth: [],
+    buildMissingAuthMessage: () => MISSING_AUTH_MESSAGE,
+    buildAuthDoctorHint: () => MISSING_AUTH_MESSAGE,
     staticCatalog: {
       order: "simple",
       run: async () => ({
         provider: {
-          // No baseUrl or api: the CLI is the transport.
+          // `agy` is the transport, so nothing here is ever dialed. Both fields
+          // are still required shape: a provider row without `baseUrl` fails
+          // catalog assembly, which takes down prepared-runtime publication for
+          // every agent, not just this provider.
+          baseUrl: ANTIGRAVITY_BASE_URL,
+          api: ANTIGRAVITY_MODEL_API,
           defaultModel: ANTIGRAVITY_DEFAULT_MODEL,
           models: buildAntigravityModelCatalog(),
         },
@@ -41,6 +53,8 @@ export function buildAntigravityProvider() {
         id: resolved,
         provider: ANTIGRAVITY_PROVIDER_ID,
         name: resolved,
+        api: ANTIGRAVITY_MODEL_API,
+        baseUrl: ANTIGRAVITY_BASE_URL,
         input: ["text"],
       };
     },

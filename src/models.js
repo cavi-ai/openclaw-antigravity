@@ -23,6 +23,17 @@ export const ANTIGRAVITY_MODEL_IDS = [
 export const ANTIGRAVITY_DEFAULT_MODEL = "gemini-3.1-pro-high";
 
 /**
+ * Placeholder endpoint for the catalog row. `agy` owns the transport, so this is
+ * never dialed; it exists because `baseUrl` is a required provider field and a
+ * row without it breaks catalog assembly. Loopback keeps it classified as a
+ * local endpoint rather than an unresolvable public host.
+ */
+export const ANTIGRAVITY_BASE_URL = "http://127.0.0.1/antigravity-cli";
+
+/** Adapter recorded on catalog rows. Unused at runtime for the same reason. */
+export const ANTIGRAVITY_MODEL_API = "openai-completions";
+
+/**
  * Short names for the ids above. `agy` itself accepts only the full id, so these
  * are expanded by the CLI backend before launch.
  */
@@ -76,6 +87,7 @@ export function buildAntigravityModelCatalog() {
   return ANTIGRAVITY_MODEL_IDS.map((id) => ({
     id,
     name: labelForModelId(id),
+    api: ANTIGRAVITY_MODEL_API,
     // Thinking-tier ids and the pro tiers reason; the flash-low tiers do not
     // advertise it. Treat everything except the explicit `-low` tiers as reasoning.
     reasoning: !id.endsWith("-low"),
