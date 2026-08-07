@@ -64,6 +64,10 @@
     }
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "docs:test": "node --test scripts/docs/*.test.mjs",
+    "docs:build": "node scripts/docs/build.mjs",
+    "docs:verify": "node scripts/docs/verify.mjs",
+    "docs:release": "node scripts/docs/release-artifact.mjs"
   }
 }

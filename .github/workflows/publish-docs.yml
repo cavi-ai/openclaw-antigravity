@@ -1,0 +1,122 @@
+name: Publish release documentation
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 20
+
+      - name: Resolve release identity
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          if [[ "$RELEASE_TAG" != "v0.1.0" ]]; then
+            echo "::error::Expected release tag v0.1.0, got $RELEASE_TAG"
+            exit 1
+          fi
+          commit="$GITHUB_SHA"
+          tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
+          if [[ "$tag_commit" != "$commit" ]]; then
+            echo "::error::Release tag does not resolve to the checked-out commit"
+            exit 1
+          fi
+          epoch="$(git show -s --format=%ct "$commit")"
+          if [[ ! "$commit" =~ ^[a-f0-9]{40}$ || ! "$epoch" =~ ^[0-9]+$ ]]; then
+            echo "::error::Release identity does not resolve to immutable provenance"
+            exit 1
+          fi
+          {
+            echo "tag=$RELEASE_TAG"
+            echo "version=${RELEASE_TAG#v}"
+            echo "commit=$commit"
+            echo "epoch=$epoch"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Test package and release documentation
+        run: |
+          npm test
+          npm pack --dry-run
+          npm run docs:test
+
+      - name: Build and verify release artifact
+        id: artifact
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+          COMMIT: ${{ steps.release.outputs.commit }}
+          EPOCH: ${{ steps.release.outputs.epoch }}
+        run: |
+          npm run docs:build -- --version "$VERSION" --tag "$TAG" --commit "$COMMIT" --source-date-epoch "$EPOCH"
+          npm run docs:verify -- --version "$VERSION" --tag "$TAG" --commit "$COMMIT" --source-date-epoch "$EPOCH"
+          output="$RUNNER_TEMP/antigravity-docs-release"
+          envelope="$RUNNER_TEMP/cavi-oss-release.json"
+          npm run --silent docs:release -- --docs-root "docs/antigravity/v${VERSION}" --output "$output" --version "$VERSION" --tag "$TAG" --repository "$GITHUB_REPOSITORY" --commit "$COMMIT" --source-date-epoch "$EPOCH" > "$envelope"
+          artifact="antigravity-docs-${TAG}.tar.gz"
+          sha256="$(jq -r '.artifact.sha256' "$envelope")"
+          {
+            echo "directory=$output"
+            echo "name=$artifact"
+            echo "sha256=$sha256"
+            echo "envelope=$envelope"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload immutable release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          DIRECTORY: ${{ steps.artifact.outputs.directory }}
+          ARTIFACT: ${{ steps.artifact.outputs.name }}
+          SHA256: ${{ steps.artifact.outputs.sha256 }}
+        run: |
+          existing="$RUNNER_TEMP/existing-$ARTIFACT"
+          if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ARTIFACT" --output "$existing" 2>/dev/null; then
+            existing_sha="$(sha256sum "$existing" | cut -d' ' -f1)"
+            if [[ "$existing_sha" != "$SHA256" ]]; then
+              echo "::error::Existing release asset differs; refusing overwrite"
+              exit 1
+            fi
+            existing_checksum="$RUNNER_TEMP/existing-$ARTIFACT.sha256"
+            if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ARTIFACT.sha256" --output "$existing_checksum" 2>/dev/null; then
+              cmp --silent "$existing_checksum" "$DIRECTORY/$ARTIFACT.sha256" || {
+                echo "::error::Existing release checksum differs; refusing overwrite"
+                exit 1
+              }
+            else
+              gh release upload "$TAG" "$DIRECTORY/$ARTIFACT.sha256" --repo "$GITHUB_REPOSITORY"
+            fi
+          else
+            gh release upload "$TAG" "$DIRECTORY/$ARTIFACT" "$DIRECTORY/$ARTIFACT.sha256" --repo "$GITHUB_REPOSITORY"
+          fi
+
+      - name: Dispatch verified release to cavi-home
+        env:
+          GH_TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+          ENVELOPE: ${{ steps.artifact.outputs.envelope }}
+        run: |
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::CONSUMER_DISPATCH_TOKEN is required"
+            exit 1
+          fi
+          jq -n --argjson payload "$(cat "$ENVELOPE")" \
+            '{event_type:"cavi-oss-release",client_payload:$payload}' | \
+            gh api --method POST /repos/cavi-ai/cavi-home/dispatches --input -
