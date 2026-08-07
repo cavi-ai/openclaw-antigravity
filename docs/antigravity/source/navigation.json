@@ -1,0 +1,40 @@
+{
+  "title": "Antigravity",
+  "sections": [
+    {
+      "title": "Introduction",
+      "pages": [
+        { "title": "Overview", "path": "introduction/overview.md" },
+        { "title": "Installation", "path": "introduction/installation.md" },
+        { "title": "Quickstart", "path": "introduction/quickstart.md" }
+      ]
+    },
+    {
+      "title": "Guides",
+      "pages": [
+        { "title": "Configuration", "path": "guides/configuration.md" },
+        { "title": "Authentication", "path": "guides/authentication.md" },
+        { "title": "Troubleshooting", "path": "guides/troubleshooting.md" }
+      ]
+    },
+    {
+      "title": "Reference",
+      "pages": [
+        { "title": "Models", "path": "reference/models.md" },
+        { "title": "Doctor and compatibility", "path": "reference/doctor-and-compatibility.md" }
+      ]
+    },
+    {
+      "title": "Security",
+      "pages": [
+        { "title": "Trust boundary", "path": "security/trust-boundary.md" }
+      ]
+    },
+    {
+      "title": "Release",
+      "pages": [
+        { "title": "Version and support", "path": "release/version-and-support.md" }
+      ]
+    }
+  ]
+}
