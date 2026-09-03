@@ -29,6 +29,8 @@ test("manifest exposes a concrete CLI auth choice for onboarding", () => {
   assert.equal(choice.choiceId, "antigravity-cli");
   assert.notEqual(choice.provider, "google-antigravity");
   assert.ok(choice.choiceHint.includes("agy"));
+  assert.equal(choice.appGuidedDiscovery, true);
+  assert.equal(choice.appGuidedActionLabel, "Reconnect");
 });
 
 test("configSchema rejects unknown keys", () => {

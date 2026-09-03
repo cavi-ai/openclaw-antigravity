@@ -1,18 +1,21 @@
 // Model catalog for Google's Antigravity CLI (`agy`).
 //
-// The list mirrors `agy models` as of agy 1.1.9. agy publishes no machine-readable
+// The list mirrors `agy models` as of agy 1.1.25. agy publishes no machine-readable
 // catalog, so ids are refreshed by hand — run `agy models` after an `agy update`
 // and reconcile. Unknown ids still work: they are passed through to `--model`
 // verbatim, so a new agy model is usable before it is listed here.
 
 /** agy's own model ids, from `agy models`. */
 export const ANTIGRAVITY_MODEL_IDS = [
+  "gemini-3.8-flash-high",
+  "gemini-3.8-flash-medium",
+  "gemini-3.8-flash-low",
+  "gemini-3.7-flash-high",
+  "gemini-3.7-flash-medium",
+  "gemini-3.7-flash-low",
   "gemini-3.6-flash-high",
   "gemini-3.6-flash-medium",
   "gemini-3.6-flash-low",
-  "gemini-3.5-flash-high",
-  "gemini-3.5-flash-medium",
-  "gemini-3.5-flash-low",
   "gemini-3.1-pro-high",
   "gemini-3.1-pro-low",
   "claude-sonnet-4-6",

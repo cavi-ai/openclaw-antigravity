@@ -55,7 +55,7 @@ directly — `openclaw plugins install` refuses to write through that shape.
 After install + enable + Gateway restart you should see:
 
 1. **Plugin list** — entry `antigravity` / Antigravity CLI
-2. **Providers / onboarding** — Antigravity CLI (`antigravity-cli`) with a CLI login choice
+2. **Providers / onboarding** — Antigravity CLI (`antigravity-cli`) with guided CLI-session setup; supported Control UI versions label the action **Reconnect**
 3. **Doctor** — diagnostics that name this provider when `agy` is missing or unsigned-in
 4. **Model use** — `antigravity-cli/<model>` runs when `agy models` succeeds
 
@@ -77,16 +77,19 @@ before the backend runs.
 ### Models
 
 `agy` serves several vendors behind one subscription. Run `agy models` for the
-live list; as of `agy` 1.1.9 the plugin ships this catalog:
+live list; as of `agy` 1.1.25 the plugin ships this catalog:
 
 | Model | Alias |
 | --- | --- |
+| `gemini-3.8-flash-high` | |
+| `gemini-3.8-flash-medium` | |
+| `gemini-3.8-flash-low` | |
+| `gemini-3.7-flash-high` | |
+| `gemini-3.7-flash-medium` | |
+| `gemini-3.7-flash-low` | |
 | `gemini-3.6-flash-high` | |
 | `gemini-3.6-flash-medium` | `flash` |
 | `gemini-3.6-flash-low` | `flash-lite` |
-| `gemini-3.5-flash-high` | |
-| `gemini-3.5-flash-medium` | |
-| `gemini-3.5-flash-low` | |
 | `gemini-3.1-pro-high` | `pro` (default) |
 | `gemini-3.1-pro-low` | |
 | `claude-sonnet-4-6` | `sonnet` |
@@ -174,7 +177,7 @@ discovery.
 
 1. Install + enable + restart Gateway
 2. Plugin list shows `antigravity`
-3. Providers / onboarding show Antigravity CLI
+3. Providers / onboarding show Antigravity CLI; supported Control UI versions show **Reconnect**
 4. Doctor names the provider when `agy` is missing or unsigned-in
 5. `openclaw agent --model antigravity-cli/gemini-3.1-pro-high -m "hello"` succeeds when `agy` is healthy
 

@@ -45,10 +45,122 @@ test("backend exposes short model aliases agy itself does not accept", () => {
   }
 });
 
-test("provider carries no auth because agy holds the Antigravity session", () => {
+test("provider exposes guided reconnect without storing OpenClaw credentials", () => {
   const provider = buildAntigravityProvider();
-  assert.deepEqual(provider.auth, []);
   assert.deepEqual(provider.envVars, []);
+  assert.equal(provider.auth.length, 1);
+  assert.equal(provider.auth[0].id, "cli");
+  assert.equal(provider.auth[0].kind, "custom");
+  assert.equal(typeof provider.auth[0].run, "function");
+  assert.equal(typeof provider.auth[0].appGuidedSetup.detectAvailability, "function");
+  assert.equal(typeof provider.auth[0].appGuidedSetup.detect, "function");
+  assert.equal(typeof provider.auth[0].appGuidedSetup.prepare, "function");
+});
+
+test("guided reconnect detects the preferred model through the configured agy command", async () => {
+  const calls = [];
+  const provider = buildAntigravityProvider(
+    { command: "/opt/custom-agy" },
+    {
+      runCommand: async (command, args) => {
+        calls.push([command, args]);
+        return [
+          "Fetching available models...",
+          "gemini-3.8-flash-high\tGemini 3.8 Flash High",
+          "gemini-3.1-pro-high\tGemini 3.1 Pro High",
+          "gemini-3.1-pro-high\tDuplicate row",
+        ].join("\n");
+      },
+    },
+  );
+
+  assert.deepEqual(await provider.auth[0].appGuidedSetup.detect({ config: {}, env: {} }), {
+    modelRef: "antigravity-cli/gemini-3.1-pro-high",
+    detail: "gemini-3.1-pro-high via agy",
+  });
+  assert.deepEqual(calls, [["/opt/custom-agy", ["models"]]]);
+});
+
+test("guided reconnect prepares only a model currently reported by agy", async () => {
+  const provider = buildAntigravityProvider(
+    {},
+    {
+      runCommand: async () =>
+        "gemini-3.8-flash-high\tGemini 3.8 Flash High\nclaude-sonnet-4-6\tClaude Sonnet 4.6\n",
+    },
+  );
+  const guided = provider.auth[0].appGuidedSetup;
+
+  assert.deepEqual(
+    await guided.prepare({
+      config: {},
+      env: {},
+      modelRef: "antigravity-cli/claude-sonnet-4-6",
+    }),
+    {
+      profiles: [],
+      defaultModel: "antigravity-cli/claude-sonnet-4-6",
+    },
+  );
+  assert.equal(
+    await guided.prepare({
+      config: {},
+      env: {},
+      modelRef: "antigravity-cli/not-reported",
+    }),
+    null,
+  );
+  assert.equal(
+    await guided.prepare({ config: {}, env: {}, modelRef: "other/claude-sonnet-4-6" }),
+    null,
+  );
+});
+
+test("guided reconnect reports unavailable agy without inventing a credential", async () => {
+  const provider = buildAntigravityProvider(
+    {},
+    {
+      runCommand: async () => {
+        throw new Error("ENOENT");
+      },
+    },
+  );
+  const context = { config: {}, env: {} };
+
+  assert.equal(await provider.auth[0].appGuidedSetup.detect(context), null);
+  assert.equal(await provider.auth[0].appGuidedSetup.detectAvailability(context), false);
+  await assert.rejects(
+    provider.auth[0].run(context),
+    /Run `agy` in a terminal to sign in, then choose Reconnect again/,
+  );
+});
+
+test("guided reconnect propagates cancellation", async () => {
+  const controller = new AbortController();
+  const reason = new Error("cancelled by caller");
+  controller.abort(reason);
+  const provider = buildAntigravityProvider();
+
+  await assert.rejects(
+    provider.auth[0].appGuidedSetup.detect({
+      config: {},
+      env: {},
+      signal: controller.signal,
+    }),
+    reason,
+  );
+});
+
+test("interactive reconnect returns the CLI-owned model without storing auth", async () => {
+  const provider = buildAntigravityProvider(
+    {},
+    { runCommand: async () => "gemini-3.1-pro-high\tGemini 3.1 Pro High\n" },
+  );
+
+  assert.deepEqual(await provider.auth[0].run({ config: {}, env: {} }), {
+    profiles: [],
+    defaultModel: "antigravity-cli/gemini-3.1-pro-high",
+  });
 });
 
 test("missing-auth guidance points at agy login, not an OpenClaw API key", () => {
@@ -71,6 +183,25 @@ test("provider catalog covers every listed agy model", async () => {
   for (const model of result.provider.models) {
     assert.equal(model.api, ANTIGRAVITY_MODEL_API);
   }
+});
+
+test("catalog matches the model ids reported by agy 1.1.25", () => {
+  assert.deepEqual(ANTIGRAVITY_MODEL_IDS, [
+    "gemini-3.8-flash-high",
+    "gemini-3.8-flash-medium",
+    "gemini-3.8-flash-low",
+    "gemini-3.7-flash-high",
+    "gemini-3.7-flash-medium",
+    "gemini-3.7-flash-low",
+    "gemini-3.6-flash-high",
+    "gemini-3.6-flash-medium",
+    "gemini-3.6-flash-low",
+    "gemini-3.1-pro-high",
+    "gemini-3.1-pro-low",
+    "claude-sonnet-4-6",
+    "claude-opus-4-6-thinking",
+    "gpt-oss-120b-medium",
+  ]);
 });
 
 test("dynamic models carry required catalog shape fields", () => {
