@@ -1,8 +1,9 @@
 // Provider registration for Antigravity (`agy`).
 //
-// Auth is empty on purpose: agy holds the user's Antigravity OAuth session
-// itself (`agy` login state), exactly as the gemini-cli runtime provider relies
-// on the gemini CLI's own credentials. OpenClaw stores no key for this provider.
+// agy owns the user's Antigravity OAuth session. The custom auth method below
+// validates that CLI-owned session; OpenClaw stores no key for this provider.
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { ANTIGRAVITY_BACKEND_ID } from "./cli-backend.js";
 import {
   ANTIGRAVITY_BASE_URL,
@@ -13,17 +14,141 @@ import {
 } from "./models.js";
 
 export const ANTIGRAVITY_PROVIDER_ID = ANTIGRAVITY_BACKEND_ID;
+const execFileAsync = promisify(execFile);
+const COMMAND_TIMEOUT_MS = 15_000;
+const COMMAND_MAX_BUFFER_BYTES = 1_048_576;
 
 const MISSING_AUTH_MESSAGE =
   "Antigravity CLI is not ready. Install Google's Antigravity CLI (`agy`), sign in with your Google subscription, then confirm with `agy models`. This provider stores no API key in OpenClaw.";
+const RECONNECT_ERROR_MESSAGE =
+  "Antigravity CLI could not list models. Run `agy` in a terminal to sign in, then choose Reconnect again. OpenClaw stores no Antigravity credential.";
 
-export function buildAntigravityProvider() {
+async function runCommand(command, args, context = {}) {
+  const { stdout } = await execFileAsync(command, args, {
+    env: context.env,
+    signal: context.signal,
+    timeout: COMMAND_TIMEOUT_MS,
+    maxBuffer: COMMAND_MAX_BUFFER_BYTES,
+  });
+  return stdout;
+}
+
+function throwIfAborted(signal) {
+  signal?.throwIfAborted?.();
+}
+
+function isAbortError(error, signal) {
+  return signal?.aborted === true || error?.name === "AbortError" || error?.code === "ABORT_ERR";
+}
+
+function parseModelIds(output) {
+  const ids = [];
+  for (const line of String(output ?? "").split(/\r?\n/)) {
+    const [rawId, label] = line.split("\t", 2);
+    const id = rawId?.trim();
+    if (!label || !/^[a-z0-9][a-z0-9._-]*-[a-z0-9][a-z0-9._-]*$/.test(id) || ids.includes(id)) {
+      continue;
+    }
+    ids.push(id);
+  }
+  return ids;
+}
+
+function chooseDetectedModel(modelIds) {
+  return modelIds.includes(ANTIGRAVITY_DEFAULT_MODEL)
+    ? ANTIGRAVITY_DEFAULT_MODEL
+    : modelIds[0];
+}
+
+/**
+ * @param {{command?: string}} [options]
+ * @param {{runCommand?: typeof runCommand}} [dependencies]
+ */
+export function buildAntigravityProvider(options = {}, dependencies = {}) {
+  const command = options.command?.trim() || "agy";
+  const execute = dependencies.runCommand ?? runCommand;
+
+  const listModels = async (context) => {
+    throwIfAborted(context.signal);
+    const output = await execute(command, ["models"], context);
+    throwIfAborted(context.signal);
+    return parseModelIds(output);
+  };
+
+  const detect = async (context) => {
+    try {
+      const modelId = chooseDetectedModel(await listModels(context));
+      return modelId
+        ? {
+            modelRef: `${ANTIGRAVITY_PROVIDER_ID}/${modelId}`,
+            detail: `${modelId} via agy`,
+          }
+        : null;
+    } catch (error) {
+      if (isAbortError(error, context.signal)) {
+        throw error;
+      }
+      return null;
+    }
+  };
+
+  const validatedResult = (modelRef) => ({
+    profiles: [],
+    defaultModel: modelRef,
+  });
+
   return {
     id: ANTIGRAVITY_PROVIDER_ID,
     label: "Antigravity CLI",
     aliases: ["antigravity", "agy"],
     envVars: [],
-    auth: [],
+    auth: [
+      {
+        id: "cli",
+        label: "Antigravity CLI",
+        hint: "Reconnect the CLI-owned Antigravity session and refresh available models",
+        kind: "custom",
+        appGuidedSetup: {
+          detectAvailability: async (context) => {
+            try {
+              throwIfAborted(context.signal);
+              await execute(command, ["--version"], context);
+              throwIfAborted(context.signal);
+              return true;
+            } catch (error) {
+              if (isAbortError(error, context.signal)) {
+                throw error;
+              }
+              return false;
+            }
+          },
+          detect,
+          prepare: async (context) => {
+            const prefix = `${ANTIGRAVITY_PROVIDER_ID}/`;
+            if (!context.modelRef.startsWith(prefix)) {
+              return null;
+            }
+            const modelId = context.modelRef.slice(prefix.length);
+            try {
+              const available = await listModels(context);
+              return available.includes(modelId) ? validatedResult(context.modelRef) : null;
+            } catch (error) {
+              if (isAbortError(error, context.signal)) {
+                throw error;
+              }
+              return null;
+            }
+          },
+        },
+        run: async (context) => {
+          const detected = await detect(context);
+          if (!detected) {
+            throw new Error(RECONNECT_ERROR_MESSAGE);
+          }
+          return validatedResult(detected.modelRef);
+        },
+      },
+    ],
     buildMissingAuthMessage: () => MISSING_AUTH_MESSAGE,
     buildAuthDoctorHint: () => MISSING_AUTH_MESSAGE,
     staticCatalog: {
