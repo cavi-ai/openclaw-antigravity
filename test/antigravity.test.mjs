@@ -246,6 +246,23 @@ test("plugin registers both the provider and the CLI backend under one id", () =
   ]);
 });
 
+test("plugin gives Antigravity provider-scoped OpenClaw and mcporter guidance", () => {
+  let hook;
+  plugin.register({
+    registerProvider: () => {},
+    registerCliBackend: () => {},
+    registerHook: (name, handler) => {
+      assert.equal(name, "before_prompt_build");
+      hook = handler;
+    },
+  });
+
+  const guidance = hook({}, { modelProviderId: "antigravity-cli" });
+  assert.match(guidance.prependContext, /openclaw/);
+  assert.match(guidance.prependContext, /mcporter/);
+  assert.equal(hook({}, { modelProviderId: "other-provider" }), undefined);
+});
+
 test("every configSchema option changes real behaviour", () => {
   const custom = buildAntigravityCliBackend({
     command: "/opt/agy",

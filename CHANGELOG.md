@@ -1,10 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - Add provider-owned guided setup that validates the external `agy` session
   without storing an OpenClaw credential.
 - Refresh the static catalog for the models reported by `agy` 1.1.25.
+- Give Antigravity provider requests focused guidance for using the local
+  `openclaw` CLI and MCP servers managed by `mcporter`.
 
 ## 0.1.0
 
