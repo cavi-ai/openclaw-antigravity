@@ -17,8 +17,8 @@ test("release identity follows npm and OpenClaw compatibility contracts", async 
     resolveReleaseIdentity,
   } = await import("./lib.mjs");
   const release = resolveReleaseIdentity({
-    version: "0.1.0",
-    tag: "v0.1.0",
+    version: "0.2.0",
+    tag: "v0.2.0",
     commit: COMMIT,
     sourceDateEpoch: 1700000000,
   });
@@ -32,8 +32,8 @@ test("release identity follows npm and OpenClaw compatibility contracts", async 
     package: "@cavi-ai/antigravity",
     repository: "cavi-ai/openclaw-antigravity",
     slug: "antigravity",
-    tag: "v0.1.0",
-    version: "0.1.0",
+    tag: "v0.2.0",
+    version: "0.2.0",
   });
   assert.equal(DOCUMENTED_VERSION, pkg.version);
   assert.equal(NPM_PACKAGE_NAME, pkg.name);
@@ -70,8 +70,8 @@ test("navigation references every official source page exactly once", async () =
 test("official docs cover install, compatibility, ownership, doctor, and auth recovery", async () => {
   const { resolveReleaseIdentity, stampReleaseTokens } = await import("./lib.mjs");
   const release = resolveReleaseIdentity({
-    version: "0.1.0",
-    tag: "v0.1.0",
+    version: "0.2.0",
+    tag: "v0.2.0",
     commit: COMMIT,
     sourceDateEpoch: 1700000000,
   });
