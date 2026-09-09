@@ -100,6 +100,18 @@ test("guided reconnect prepares only a model currently reported by agy", async (
     {
       profiles: [],
       defaultModel: "antigravity-cli/claude-sonnet-4-6",
+      configPatch: {
+        models: {
+          mode: "merge",
+          providers: {
+            "antigravity-cli": {
+              baseUrl: ANTIGRAVITY_BASE_URL,
+              api: ANTIGRAVITY_MODEL_API,
+              models: buildAntigravityModelCatalog(),
+            },
+          },
+        },
+      },
     },
   );
   assert.equal(
@@ -160,6 +172,49 @@ test("interactive reconnect returns the CLI-owned model without storing auth", a
   assert.deepEqual(await provider.auth[0].run({ config: {}, env: {} }), {
     profiles: [],
     defaultModel: "antigravity-cli/gemini-3.1-pro-high",
+    configPatch: {
+      models: {
+        mode: "merge",
+        providers: {
+          "antigravity-cli": {
+            baseUrl: ANTIGRAVITY_BASE_URL,
+            api: ANTIGRAVITY_MODEL_API,
+            models: buildAntigravityModelCatalog(),
+          },
+        },
+      },
+    },
+  });
+});
+
+test("reconnect preserves explicit provider settings and mode while refreshing connection", async () => {
+  const provider = buildAntigravityProvider(
+    {},
+    { runCommand: async () => "gemini-3.1-pro-high\tGemini 3.1 Pro High\n" },
+  );
+  const config = {
+    models: {
+      mode: "replace",
+      providers: {
+        "antigravity-cli": { models: [{ id: "pinned-model" }], label: "kept" },
+      },
+    },
+  };
+
+  const result = await provider.auth[0].run({ config, env: {} });
+
+  assert.deepEqual(result.configPatch, {
+    models: {
+      mode: "replace",
+      providers: {
+        "antigravity-cli": {
+          label: "kept",
+          baseUrl: ANTIGRAVITY_BASE_URL,
+          api: ANTIGRAVITY_MODEL_API,
+          models: [{ id: "pinned-model" }],
+        },
+      },
+    },
   });
 });
 
@@ -248,15 +303,18 @@ test("plugin registers both the provider and the CLI backend under one id", () =
 
 test("plugin gives Antigravity provider-scoped OpenClaw and mcporter guidance", () => {
   let hook;
+  let hookOptions;
   plugin.register({
     registerProvider: () => {},
     registerCliBackend: () => {},
-    registerHook: (name, handler) => {
+    registerHook: (name, handler, options) => {
       assert.equal(name, "before_prompt_build");
       hook = handler;
+      hookOptions = options;
     },
   });
 
+  assert.equal(hookOptions?.registrationId, "antigravity-openclaw-cli-guidance");
   const guidance = hook({}, { modelProviderId: "antigravity-cli" });
   assert.match(guidance.prependContext, /openclaw/);
   assert.match(guidance.prependContext, /mcporter/);

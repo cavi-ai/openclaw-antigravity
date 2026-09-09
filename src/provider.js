@@ -1,7 +1,8 @@
 // Provider registration for Antigravity (`agy`).
 //
 // agy owns the user's Antigravity OAuth session. The custom auth method below
-// validates that CLI-owned session; OpenClaw stores no key for this provider.
+// validates that CLI-owned session and records the provider's non-secret
+// connection (models, endpoint) in config; OpenClaw stores no key for this provider.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { ANTIGRAVITY_BACKEND_ID } from "./cli-backend.js";
@@ -92,9 +93,33 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     }
   };
 
-  const validatedResult = (modelRef) => ({
+  // On a successful reconnect, hand OpenClaw a non-secret config patch so the
+  // provider's endpoint and model catalog persist. Shape matches the provider
+  // connection contract other CLI backends use (`configPatch.models.providers`).
+  const buildConnectionPatch = (config = {}) => {
+    const existing = config.models?.providers?.[ANTIGRAVITY_PROVIDER_ID] ?? {};
+    return {
+      models: {
+        mode: config.models?.mode ?? "merge",
+        providers: {
+          [ANTIGRAVITY_PROVIDER_ID]: {
+            ...existing,
+            baseUrl: ANTIGRAVITY_BASE_URL,
+            api: ANTIGRAVITY_MODEL_API,
+            models:
+              Array.isArray(existing.models) && existing.models.length > 0
+                ? existing.models
+                : buildAntigravityModelCatalog(),
+          },
+        },
+      },
+    };
+  };
+
+  const validatedResult = (modelRef, config) => ({
     profiles: [],
     defaultModel: modelRef,
+    configPatch: buildConnectionPatch(config),
   });
 
   return {
@@ -131,7 +156,9 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
             const modelId = context.modelRef.slice(prefix.length);
             try {
               const available = await listModels(context);
-              return available.includes(modelId) ? validatedResult(context.modelRef) : null;
+              return available.includes(modelId)
+                ? validatedResult(context.modelRef, context.config)
+                : null;
             } catch (error) {
               if (isAbortError(error, context.signal)) {
                 throw error;
@@ -145,7 +172,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
           if (!detected) {
             throw new Error(RECONNECT_ERROR_MESSAGE);
           }
-          return validatedResult(detected.modelRef);
+          return validatedResult(detected.modelRef, context.config);
         },
       },
     ],
