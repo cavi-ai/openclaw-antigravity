@@ -1,16 +1,42 @@
 name: Publish release documentation
 
+# Build the immutable documentation artifact for a published GitHub Release,
+# attach it to that release, and dispatch cavi-home to ingest it so the docs
+# appear at cavi-ai.xyz/docs/antigravity. The release tag drives the version;
+# scripts/docs validate it against package.json, so this workflow is not pinned
+# to any single version.
+
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact stable version to verify or backfill (defaults to package.json)
+        required: false
+        type: string
+      dry_run:
+        description: Build and verify without uploading assets or dispatching cavi-home
+        required: true
+        default: "true"
+        type: choice
+        options: ["true", "false"]
 
 permissions: {}
+
+concurrency:
+  # Serialize on the tag so a manual dispatch and a release event for the same
+  # version cannot race the asset upload.
+  group: publish-docs-${{ github.event_name == 'release' && github.event.release.tag_name || (inputs.version && format('v{0}', inputs.version)) || 'package' }}
+  cancel-in-progress: false
 
 jobs:
   publish:
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    env:
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
     steps:
       - name: Check out release source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -27,27 +53,43 @@ jobs:
       - name: Resolve release identity
         id: release
         env:
+          EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
-          if [[ "$RELEASE_TAG" != "v0.1.0" ]]; then
-            echo "::error::Expected release tag v0.1.0, got $RELEASE_TAG"
+          package_version="$(node --input-type=module -e 'import { DOCUMENTED_VERSION } from "./scripts/docs/lib.mjs"; process.stdout.write(DOCUMENTED_VERSION)')"
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            tag="$RELEASE_TAG"
+            version="${tag#v}"
+          else
+            version="${INPUT_VERSION:-$package_version}"
+            tag="v${version}"
+          fi
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ || "$tag" != "v${version}" ]]; then
+            echo "::error::documentation releases require an exact v-prefixed stable version, got tag '$tag'"
+            exit 1
+          fi
+          if [[ "$version" != "$package_version" ]]; then
+            echo "::error::release version $version does not match package.json ($package_version); bump package.json before tagging"
             exit 1
           fi
           commit="$GITHUB_SHA"
-          tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
-          if [[ "$tag_commit" != "$commit" ]]; then
-            echo "::error::Release tag does not resolve to the checked-out commit"
-            exit 1
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            tag_commit="$(git rev-list -n 1 "$tag")"
+            if [[ "$tag_commit" != "$commit" ]]; then
+              echo "::error::release tag $tag does not resolve to the checked-out commit"
+              exit 1
+            fi
           fi
           epoch="$(git show -s --format=%ct "$commit")"
           if [[ ! "$commit" =~ ^[a-f0-9]{40}$ || ! "$epoch" =~ ^[0-9]+$ ]]; then
-            echo "::error::Release identity does not resolve to immutable provenance"
+            echo "::error::release identity does not resolve to immutable provenance"
             exit 1
           fi
           {
-            echo "tag=$RELEASE_TAG"
-            echo "version=${RELEASE_TAG#v}"
+            echo "tag=$tag"
+            echo "version=$version"
             echo "commit=$commit"
             echo "epoch=$epoch"
           } >> "$GITHUB_OUTPUT"
@@ -81,6 +123,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload immutable release assets
+        if: ${{ env.DRY_RUN != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
@@ -88,6 +131,11 @@ jobs:
           ARTIFACT: ${{ steps.artifact.outputs.name }}
           SHA256: ${{ steps.artifact.outputs.sha256 }}
         run: |
+          release_state="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease)"
+          if ! printf '%s' "$release_state" | jq -e '.isDraft == false and .isPrerelease == false' >/dev/null; then
+            echo "::error::documentation asset requires a published, non-prerelease GitHub Release for $TAG"
+            exit 1
+          fi
           existing="$RUNNER_TEMP/existing-$ARTIFACT"
           if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ARTIFACT" --output "$existing" 2>/dev/null; then
             existing_sha="$(sha256sum "$existing" | cut -d' ' -f1)"
@@ -109,6 +157,7 @@ jobs:
           fi
 
       - name: Dispatch verified release to cavi-home
+        if: ${{ env.DRY_RUN != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
           ENVELOPE: ${{ steps.artifact.outputs.envelope }}

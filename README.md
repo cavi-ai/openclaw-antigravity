@@ -4,6 +4,16 @@ Use Google's Antigravity CLI (`agy`) as an [OpenClaw](https://github.com/opencla
 
 The plugin uses the Antigravity login already available to `agy`. It does not ask for or store an Antigravity API key.
 
+**Documentation:** [Online docs](https://cavi-ai.xyz/docs/antigravity) ·
+[Overview](docs/antigravity/source/pages/introduction/overview.md) ·
+[Quickstart](docs/antigravity/source/pages/introduction/quickstart.md) ·
+[Configuration](docs/antigravity/source/pages/guides/configuration.md) ·
+[Contributing](CONTRIBUTING.md)
+
+The pages under `docs/antigravity/source/` are the release source. A published
+GitHub Release builds them into an immutable versioned artifact that cavi-home
+ingests and serves at [cavi-ai.xyz/docs/antigravity](https://cavi-ai.xyz/docs/antigravity).
+
 ## Requirements
 
 - OpenClaw 2026.7 or newer
@@ -104,9 +114,14 @@ openclaw config set plugins.entries.antigravity.config.command /absolute/path/to
 ## Development
 
 ```bash
-npm test
-npm run docs:verify
+npm test          # plugin behaviour
+npm run docs:test # documentation build/verify/release tooling
 ```
+
+Releasing docs is automated: publish a GitHub Release `vX.Y.Z` (matching
+`package.json`) and the `Publish release documentation` workflow builds the
+versioned artifact, attaches it to the release, and dispatches cavi-home to
+ingest it. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
