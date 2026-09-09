@@ -13,9 +13,12 @@ export function registerAntigravity(api) {
   const config = api?.pluginConfig ?? {};
   api.registerProvider(buildAntigravityProvider(config));
   api.registerCliBackend(buildAntigravityCliBackend(config));
-  api.registerHook?.("before_prompt_build", (_event, context) =>
-    context?.modelProviderId === "antigravity-cli"
-      ? { prependContext: ANTIGRAVITY_OPENCLAW_CONTEXT }
-      : undefined,
+  api.registerHook?.(
+    "before_prompt_build",
+    (_event, context) =>
+      context?.modelProviderId === "antigravity-cli"
+        ? { prependContext: ANTIGRAVITY_OPENCLAW_CONTEXT }
+        : undefined,
+    { registrationId: "antigravity-openclaw-cli-guidance" },
   );
 }
