@@ -39,6 +39,8 @@ test("configSchema rejects unknown keys", () => {
 });
 
 test("package.json is ClawHub-ready and ships setup/doctor modules", () => {
+  assert.equal(manifest.version, pkg.version);
+  assert.equal(plugin.version, pkg.version);
   assert.ok(pkg.openclaw.compat.pluginApi);
   assert.ok(pkg.openclaw.compat.minGatewayVersion);
   assert.ok(pkg.openclaw.build.openclawVersion);

@@ -9,6 +9,7 @@ const COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
 test("release identity follows npm and OpenClaw compatibility contracts", async () => {
   const pkg = JSON.parse(await readFile(path.join(ROOT, "package.json"), "utf8"));
+  const changelog = await readFile(path.join(ROOT, "CHANGELOG.md"), "utf8");
   const {
     DOCUMENTED_VERSION,
     NPM_PACKAGE_NAME,
@@ -36,6 +37,7 @@ test("release identity follows npm and OpenClaw compatibility contracts", async 
     version: "0.2.0",
   });
   assert.equal(DOCUMENTED_VERSION, pkg.version);
+  assert.ok(changelog.includes(`## ${pkg.version}`));
   assert.equal(NPM_PACKAGE_NAME, pkg.name);
   assert.equal(pkg.repository.url, "git+https://github.com/cavi-ai/openclaw-antigravity.git");
   assert.equal(pkg.peerDependencies.openclaw, ">=2026.7.0");

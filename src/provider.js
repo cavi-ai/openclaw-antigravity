@@ -25,13 +25,13 @@ const RECONNECT_ERROR_MESSAGE =
   "Antigravity CLI could not list models. Run `agy` in a terminal to sign in, then choose Reconnect again. OpenClaw stores no Antigravity credential.";
 
 async function runCommand(command, args, context = {}) {
-  const { stdout } = await execFileAsync(command, args, {
+  const result = await execFileAsync(command, args, {
     env: context.env,
     signal: context.signal,
     timeout: COMMAND_TIMEOUT_MS,
     maxBuffer: COMMAND_MAX_BUFFER_BYTES,
   });
-  return stdout;
+  return [result.stdout, result.stderr].filter(Boolean).join("\n");
 }
 
 function throwIfAborted(signal) {
@@ -42,12 +42,13 @@ function isAbortError(error, signal) {
   return signal?.aborted === true || error?.name === "AbortError" || error?.code === "ABORT_ERR";
 }
 
-function parseModelIds(output) {
+/** Extracts model ids from the human-readable `agy models` table. */
+export function parseAntigravityModelIds(output) {
   const ids = [];
   for (const line of String(output ?? "").split(/\r?\n/)) {
-    const [rawId, label] = line.split("\t", 2);
-    const id = rawId?.trim();
-    if (!label || !/^[a-z0-9][a-z0-9._-]*-[a-z0-9][a-z0-9._-]*$/.test(id) || ids.includes(id)) {
+    const match = /^\s*([a-z0-9][a-z0-9._-]*-[a-z0-9][a-z0-9._-]*)\s+\S.*$/u.exec(line);
+    const id = match?.[1];
+    if (!id || ids.includes(id)) {
       continue;
     }
     ids.push(id);
@@ -73,7 +74,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     throwIfAborted(context.signal);
     const output = await execute(command, ["models"], context);
     throwIfAborted(context.signal);
-    return parseModelIds(output);
+    return parseAntigravityModelIds(output);
   };
 
   const detect = async (context) => {

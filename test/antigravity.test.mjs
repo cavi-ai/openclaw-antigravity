@@ -8,7 +8,10 @@ import {
   buildAntigravityModelCatalog,
   labelForModelId,
 } from "../src/models.js";
-import { buildAntigravityProvider } from "../src/provider.js";
+import {
+  buildAntigravityProvider,
+  parseAntigravityModelIds,
+} from "../src/provider.js";
 import { plugin } from "../src/index.js";
 
 test("backend drives `agy` in print mode and parses its json result", () => {
@@ -79,6 +82,19 @@ test("guided reconnect detects the preferred model through the configured agy co
     detail: "gemini-3.1-pro-high via agy",
   });
   assert.deepEqual(calls, [["/opt/custom-agy", ["models"]]]);
+});
+
+test("model discovery accepts tab- and space-separated agy output from either stream", () => {
+  assert.deepEqual(
+    parseAntigravityModelIds([
+      "Fetching available models...",
+      "gemini-3.8-flash-high\tGemini 3.8 Flash High",
+      "claude-sonnet-4-6  Claude Sonnet 4.6",
+      "gemini-3.8-flash-high Duplicate row",
+      "not-a-model-row",
+    ].join("\n")),
+    ["gemini-3.8-flash-high", "claude-sonnet-4-6"],
+  );
 });
 
 test("guided reconnect prepares only a model currently reported by agy", async () => {
@@ -196,7 +212,13 @@ test("reconnect preserves explicit provider settings and mode while refreshing c
     models: {
       mode: "replace",
       providers: {
-        "antigravity-cli": { models: [{ id: "pinned-model" }], label: "kept" },
+        "antigravity-cli": {
+          baseUrl: "http://stale.invalid",
+          label: "kept",
+          timeoutSeconds: 90,
+          params: { owner: "user" },
+          models: [{ id: "pinned-model" }],
+        },
       },
     },
   };
@@ -211,6 +233,8 @@ test("reconnect preserves explicit provider settings and mode while refreshing c
           label: "kept",
           baseUrl: ANTIGRAVITY_BASE_URL,
           api: ANTIGRAVITY_MODEL_API,
+          timeoutSeconds: 90,
+          params: { owner: "user" },
           models: [{ id: "pinned-model" }],
         },
       },
