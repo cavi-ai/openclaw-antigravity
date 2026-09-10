@@ -1,0 +1,37 @@
+name: Bootstrap npm trusted publishing
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out v0.2.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: v0.2.0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Publish initial package and register trusted publisher
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm install -g npm@11
+          test "$(node -p "require('./package.json').version")" = "0.2.0"
+          npm publish --access public
+          npm trust github @cavi-ai/antigravity \
+            --file publish-docs.yml \
+            --repo cavi-ai/openclaw-antigravity \
+            --allow-publish \
+            --yes
