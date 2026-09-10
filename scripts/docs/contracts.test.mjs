@@ -139,3 +139,20 @@ test("package exposes documentation commands and release workflow runs every gat
   assert.equal(actionRefs.length, 2);
   assert.ok(actionRefs.every((ref) => /^[a-f0-9]{40}$/u.test(ref)));
 });
+
+test("release workflow publishes npm through trusted publishing before documentation", async () => {
+  const workflow = await readFile(path.join(ROOT, ".github/workflows/publish-docs.yml"), "utf8");
+  for (const phrase of [
+    "id-token: write",
+    "npm install -g npm@11",
+    'npm view "@cavi-ai/antigravity@${PKG_VERSION}" version',
+    "npm publish --access public --provenance",
+  ]) {
+    assert.ok(workflow.includes(phrase), phrase);
+  }
+  assert.ok(
+    workflow.indexOf("npm publish --access public --provenance") <
+      workflow.indexOf("npm run docs:build --"),
+  );
+  assert.doesNotMatch(workflow, /(?:NPM_TOKEN|NODE_AUTH_TOKEN)/u);
+});
