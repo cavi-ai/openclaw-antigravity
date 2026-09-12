@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Register `before_prompt_build` with `api.on` so the plugin loads on current
+  OpenClaw hosts. `0.2.0` called `registerHook` without a name and aborted
+  registration with `hook registration missing name`.
+
 ## 0.2.0
 
 - Add provider-owned guided setup that validates the external `agy` session

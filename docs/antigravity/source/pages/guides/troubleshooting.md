@@ -6,6 +6,12 @@ Check the install path, the `plugins.entries.antigravity.enabled` flag, and that
 the Gateway restarted after the change. Doctor can diagnose registered
 provider state, but doctor cannot repair discovery when the plugin never loaded.
 
+## `hook registration missing name`
+
+`0.2.0` failed during plugin register on OpenClaw hosts that require a named
+legacy hook or typed `api.on("before_prompt_build")`. Install `0.2.1` or later
+and restart the Gateway.
+
 ## `agy` is missing
 
 Run `agy models` in the Gateway environment. If the shell finds a different

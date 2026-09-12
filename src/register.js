@@ -8,17 +8,18 @@ const ANTIGRAVITY_OPENCLAW_CONTEXT = [
   "Do not change global OpenClaw or mcporter configuration unless the user explicitly asks.",
 ].join(" ");
 
+function injectOpenClawGuidance(_event, context) {
+  return context?.modelProviderId === "antigravity-cli"
+    ? { prependContext: ANTIGRAVITY_OPENCLAW_CONTEXT }
+    : undefined;
+}
+
 /** Shared by runtime entry and package-root setup-api. */
 export function registerAntigravity(api) {
   const config = api?.pluginConfig ?? {};
   api.registerProvider(buildAntigravityProvider(config));
   api.registerCliBackend(buildAntigravityCliBackend(config));
-  api.registerHook?.(
-    "before_prompt_build",
-    (_event, context) =>
-      context?.modelProviderId === "antigravity-cli"
-        ? { prependContext: ANTIGRAVITY_OPENCLAW_CONTEXT }
-        : undefined,
-    { registrationId: "antigravity-openclaw-cli-guidance" },
-  );
+  // Typed lifecycle hooks only fire through api.on. registerHook("before_prompt_build")
+  // is ignored, and without opts.name it throws and aborts the whole plugin.
+  api.on?.("before_prompt_build", injectOpenClawGuidance);
 }
