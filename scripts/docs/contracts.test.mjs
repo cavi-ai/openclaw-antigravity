@@ -150,6 +150,7 @@ test("release workflow publishes npm through trusted publishing before documenta
   ]) {
     assert.ok(workflow.includes(phrase), phrase);
   }
+  assert.ok(workflow.includes("registry-url: https://registry.npmjs.org"));
   assert.ok(
     workflow.indexOf("npm publish --access public --provenance") <
       workflow.indexOf("npm run docs:build --"),
