@@ -327,18 +327,21 @@ test("plugin registers both the provider and the CLI backend under one id", () =
 
 test("plugin gives Antigravity provider-scoped OpenClaw and mcporter guidance", () => {
   let hook;
-  let hookOptions;
+  let registerHookCalled = false;
   plugin.register({
     registerProvider: () => {},
     registerCliBackend: () => {},
-    registerHook: (name, handler, options) => {
+    registerHook: () => {
+      registerHookCalled = true;
+    },
+    on: (name, handler) => {
       assert.equal(name, "before_prompt_build");
       hook = handler;
-      hookOptions = options;
     },
   });
 
-  assert.equal(hookOptions?.registrationId, "antigravity-openclaw-cli-guidance");
+  assert.equal(registerHookCalled, false);
+  assert.equal(typeof hook, "function");
   const guidance = hook({}, { modelProviderId: "antigravity-cli" });
   assert.match(guidance.prependContext, /openclaw/);
   assert.match(guidance.prependContext, /mcporter/);
