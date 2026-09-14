@@ -7,7 +7,7 @@ export const PLUGIN_ID = "antigravity";
 export const plugin = {
   id: PLUGIN_ID,
   name: "Antigravity CLI",
-  version: "0.2.1",
+  version: "0.2.2",
   description: "Runs Google's Antigravity CLI (agy) as a subscription-backed model provider.",
   register: registerAntigravity,
 };
