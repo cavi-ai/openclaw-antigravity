@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2
+
+- Route Control UI login through the credential-only provider connection flow.
+  This avoids inference-gated setup, which cannot safely use `agy` because the
+  CLI does not expose a hard tool-free mode.
+
 ## 0.2.1
 
 - Register `before_prompt_build` with `api.on` so the plugin loads on current
