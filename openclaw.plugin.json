@@ -1,7 +1,7 @@
 {
   "id": "antigravity",
   "name": "Antigravity CLI",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Runs Google's Antigravity CLI (agy) as a subscription-backed model provider.",
   "enabledByDefault": false,
   "activation": {
@@ -25,13 +25,13 @@
       "provider": "antigravity-cli",
       "method": "cli",
       "choiceId": "antigravity-cli",
-      "credentialOnly": true,
+      "appGuidedDiscovery": true,
+      "appGuidedActionLabel": "Reconnect",
       "choiceLabel": "Antigravity CLI",
       "choiceHint": "Use an existing Antigravity CLI (agy) login on this host. Run `agy models` to confirm.",
       "groupId": "antigravity",
       "groupLabel": "Antigravity",
-      "groupHint": "Subscription-backed models via agy",
-      "onboardingFeatured": true
+      "groupHint": "Subscription-backed models via agy"
     }
   ],
   "uiHints": {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3
+
+- Use OpenClaw's provider-owned guided discovery for Control UI reconnect, the
+  same local-CLI path as Ollama and LM Studio. Models → Providers shows
+  **Reconnect** and persists the non-secret connection without an OpenClaw
+  credential. This replaces the 0.2.2 credential-only Connect routing, which
+  is not a host contract for profileless CLI sessions.
+
 ## 0.2.2
 
 - Route Control UI login through the credential-only provider connection flow.

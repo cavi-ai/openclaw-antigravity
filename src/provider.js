@@ -1,6 +1,6 @@
 // Provider registration for Antigravity (`agy`).
 //
-// agy owns the user's Antigravity OAuth session. The custom auth method below
+// agy owns the user's Antigravity OAuth session. Guided discovery/reconnect
 // validates that CLI-owned session and records the provider's non-secret
 // connection (models, endpoint) in config; OpenClaw stores no key for this provider.
 import { execFile } from "node:child_process";

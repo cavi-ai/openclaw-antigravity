@@ -37,9 +37,9 @@ Restart the OpenClaw Gateway after installation.
 
 ## Connect
 
-In the Control UI, open **Models → Providers**, choose **Connect**, and select
-**Antigravity CLI**. The plugin validates the existing `agy` session and makes
-its models available without creating a separate credential or changing the
+In the Control UI, open **Models → Providers** and choose **Reconnect** on the
+Antigravity CLI card. The plugin validates the existing `agy` session and
+refreshes the provider connection without creating a credential or changing the
 default model.
 
 ## Use

@@ -7,8 +7,8 @@ import test from "node:test";
 import { gunzipSync } from "node:zlib";
 
 const IDENTITY = {
-  version: "0.2.2",
-  tag: "v0.2.2",
+  version: "0.2.3",
+  tag: "v0.2.3",
   commit: "0123456789abcdef0123456789abcdef01234567",
   sourceDateEpoch: 1700000000,
 };
@@ -52,25 +52,25 @@ test("release artifact, checksum, exact envelope, and member bounds are determin
     schemaVersion: 1,
     slug: "antigravity",
     kind: "product-docs",
-    version: "0.2.2",
-    tag: "v0.2.2",
+    version: "0.2.3",
+    tag: "v0.2.3",
     repository: "cavi-ai/openclaw-antigravity",
     commit: IDENTITY.commit,
     artifact: {
-      url: "https://github.com/cavi-ai/openclaw-antigravity/releases/download/v0.2.2/antigravity-docs-v0.2.2.tar.gz",
+      url: "https://github.com/cavi-ai/openclaw-antigravity/releases/download/v0.2.3/antigravity-docs-v0.2.3.tar.gz",
       sha256,
       format: "tar.gz",
     },
   });
   assert.equal(
     await readFile(results[0].checksumPath, "utf8"),
-    `${sha256}  antigravity-docs-v0.2.2.tar.gz\n`,
+    `${sha256}  antigravity-docs-v0.2.3.tar.gz\n`,
   );
   const entries = tarEntries(firstBytes);
   assert.ok(entries.some((entry) => entry.name === "cavi-release.json"));
   assert.ok(entries.every((entry) => entry.type === "0"));
   assert.ok(entries.every(({ name }) => (
-    name === "cavi-release.json" || name.startsWith("docs/antigravity/v0.2.2/")
+    name === "cavi-release.json" || name.startsWith("docs/antigravity/v0.2.3/")
   )));
   assert.ok(entries.every(({ name }) => !name.startsWith("/") && !name.split("/").includes("..")));
 });

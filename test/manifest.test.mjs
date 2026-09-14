@@ -22,16 +22,16 @@ test("manifest omits invalid PluginKind and owns antigravity-cli", () => {
   assert.deepEqual(manifest.setup.cliBackends, ["antigravity-cli"]);
   assert.equal(manifest.setup.providers[0].id, "antigravity-cli");
 });
-test("manifest exposes a credential-only CLI connection outside inference-gated setup", () => {
+test("manifest exposes guided discovery reconnect without a credential-only login", () => {
   const choice = manifest.providerAuthChoices[0];
   assert.equal(choice.provider, "antigravity-cli");
   assert.equal(choice.method, "cli");
   assert.equal(choice.choiceId, "antigravity-cli");
   assert.notEqual(choice.provider, "google-antigravity");
   assert.ok(choice.choiceHint.includes("agy"));
-  assert.equal(choice.credentialOnly, true);
-  assert.equal(choice.appGuidedDiscovery, undefined);
-  assert.equal(choice.appGuidedActionLabel, undefined);
+  assert.equal(choice.credentialOnly, undefined);
+  assert.equal(choice.appGuidedDiscovery, true);
+  assert.equal(choice.appGuidedActionLabel, "Reconnect");
 });
 
 test("configSchema rejects unknown keys", () => {

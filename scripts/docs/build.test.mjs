@@ -6,8 +6,8 @@ import path from "node:path";
 import test from "node:test";
 
 const IDENTITY = {
-  version: "0.2.2",
-  tag: "v0.2.2",
+  version: "0.2.3",
+  tag: "v0.2.3",
   commit: "0123456789abcdef0123456789abcdef01234567",
   sourceDateEpoch: 1700000000,
 };
@@ -49,11 +49,11 @@ test("build output is complete, stamped, and byte reproducible", async (context)
     schemaVersion: 2,
     package: "@cavi-ai/antigravity",
     product: "antigravity",
-    version: "0.2.2",
+    version: "0.2.3",
     contentSha256: await digest(first, true),
-    publicBasePath: "/docs/antigravity/v0.2.2",
+    publicBasePath: "/docs/antigravity/v0.2.3",
     stableAlias: "/docs/antigravity",
-    release: { tag: "v0.2.2", commit: IDENTITY.commit },
+    release: { tag: "v0.2.3", commit: IDENTITY.commit },
     generatedAt: "2023-11-14T22:13:20.000Z",
   });
   await verifyDocumentation({ ...IDENTITY, docsRoot: first });
@@ -69,7 +69,7 @@ test("build and verification reject inconsistent identity or changed output", as
   const { verifyDocumentation } = await import("./verify.mjs");
   await assert.rejects(
     buildDocumentation({ ...IDENTITY, version: "0.1.1", outputRoot: temporary }),
-    /release version must be 0\.2\.2/u,
+    /release version must be 0\.2\.3/u,
   );
   const output = path.join(temporary, "built");
   await buildDocumentation({ ...IDENTITY, outputRoot: output });
