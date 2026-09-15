@@ -119,7 +119,16 @@ openclaw config set plugins.entries.antigravity.config.command /absolute/path/to
 ```bash
 npm test          # plugin behaviour
 npm run docs:test # documentation build/verify/release tooling
+npm run check:host-integration # live agy + isolated installed-host Reconnect check
 ```
+
+The host-integration check requires a signed-in `agy` session and a compatible
+installed `openclaw` command. It runs `agy models`, starts the working-tree
+plugin in a temporary loopback-only OpenClaw state, verifies that the host
+projects **Reconnect** for Antigravity, and verifies that credential-only
+**Connect** is absent. The temporary gateway and state are removed afterward;
+the installed gateway, OpenClaw config, credentials, and default model are not
+changed. Set `AGY_BIN` or `OPENCLAW_BIN` to use a non-default executable.
 
 Releasing docs is automated: publish a GitHub Release `vX.Y.Z` (matching
 `package.json`) and the `Publish release documentation` workflow builds the
