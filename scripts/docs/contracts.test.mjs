@@ -132,8 +132,7 @@ test("package exposes documentation commands and release workflow runs every gat
   assert.ok(workflow.indexOf("npm test") < workflow.indexOf("npm run docs:build --"));
   assert.ok(workflow.indexOf("npm run docs:verify --") < workflow.indexOf("gh api --method POST"));
   assert.match(workflow, /npm run --silent docs:release --[^\n]+> "\$envelope"/u);
-  assert.match(workflow, /refs\/tags\/v\{0\}/u);
-  assert.match(workflow, /commit="\$\(git rev-parse HEAD\)"/u);
+  assert.match(workflow, /GITHUB_SHA: \$\{\{ github\.sha \}\}/u);
   assert.match(workflow, /tag_commit/u);
   const actionRefs = [...workflow.matchAll(/uses: actions\/(?:checkout|setup-node)@([^\s]+)/gu)]
     .map((match) => match[1]);
@@ -147,8 +146,6 @@ test("release workflow publishes npm through trusted publishing before documenta
     "id-token: write",
     "node-version: 24",
     "npm install -g npm@11",
-    "inputs.dry_run == 'false'",
-    "RELEASE_TAG: ${{ steps.release.outputs.tag }}",
     'npm view "@cavi-ai/antigravity@${PKG_VERSION}" version',
     "npm publish --access public --provenance",
   ]) {
@@ -160,4 +157,14 @@ test("release workflow publishes npm through trusted publishing before documenta
       workflow.indexOf("npm run docs:build --"),
   );
   assert.doesNotMatch(workflow, /(?:NPM_TOKEN|NODE_AUTH_TOKEN)/u);
+});
+
+test("manual backfills cannot publish npm from a mismatched provenance ref", async () => {
+  const workflow = await readFile(path.join(ROOT, ".github/workflows/publish-docs.yml"), "utf8");
+  assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/u);
+  assert.match(
+    workflow,
+    /- name: Publish package\n\s+if: \$\{\{ github\.event_name == 'release' \}\}/u,
+  );
+  assert.doesNotMatch(workflow, /inputs\.dry_run == 'false'/u);
 });

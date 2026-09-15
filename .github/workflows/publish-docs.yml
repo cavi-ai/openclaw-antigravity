@@ -42,7 +42,7 @@ jobs:
       - name: Check out release source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
-          ref: ${{ github.event_name == 'release' && github.sha || (inputs.version && format('refs/tags/v{0}', inputs.version)) || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -58,6 +58,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           INPUT_VERSION: ${{ inputs.version }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           package_version="$(node --input-type=module -e 'import { DOCUMENTED_VERSION } from "./scripts/docs/lib.mjs"; process.stdout.write(DOCUMENTED_VERSION)')"
           if [[ "$EVENT_NAME" == "release" ]]; then
@@ -75,7 +76,7 @@ jobs:
             echo "::error::release version $version does not match package.json ($package_version); bump package.json before tagging"
             exit 1
           fi
-          commit="$(git rev-parse HEAD)"
+          commit="$GITHUB_SHA"
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
             tag_commit="$(git rev-list -n 1 "$tag")"
             if [[ "$tag_commit" != "$commit" ]]; then
@@ -104,9 +105,9 @@ jobs:
       # Match the other CAVI npm packages: GitHub's OIDC token is exchanged for
       # a short-lived npm publishing credential, so no registry token is stored.
       - name: Publish package
-        if: ${{ github.event_name == 'release' || inputs.dry_run == 'false' }}
+        if: ${{ github.event_name == 'release' }}
         env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           npm install -g npm@11
           PKG_VERSION="$(node -p "require('./package.json').version")"
