@@ -1,10 +1,32 @@
 import assert from "node:assert/strict";
+import { access } from "node:fs/promises";
 import test from "node:test";
 import {
   assertAgySession,
   assertReconnectProjection,
   buildGatewayCallArgs,
+  commandOutput,
+  withTemporaryRoot,
 } from "../scripts/check-host-integration.mjs";
+
+test("external commands are terminated at their process timeout", () => {
+  assert.throws(
+    () => commandOutput(process.execPath, ["-e", "setTimeout(() => {}, 5000)"], { timeout: 25 }),
+    /timed out after 25ms/i,
+  );
+});
+
+test("temporary host state is removed when setup fails", async () => {
+  let createdRoot;
+  await assert.rejects(
+    withTemporaryRoot(async (root) => {
+      createdRoot = root;
+      throw new Error("port reservation failed");
+    }),
+    /port reservation failed/,
+  );
+  await assert.rejects(access(createdRoot), { code: "ENOENT" });
+});
 
 test("isolated gateway calls carry their ephemeral token", () => {
   assert.deepEqual(
