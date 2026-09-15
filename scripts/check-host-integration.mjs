@@ -13,6 +13,7 @@ const PROVIDER_ID = "antigravity-cli";
 const CHOICE_ID = "antigravity-cli";
 const ACTION_LABEL = "Reconnect";
 const MIN_HOST_VERSION = [2026, 7, 0];
+const COMMAND_TIMEOUT_MS = 30_000;
 const STARTUP_TIMEOUT_MS = 20_000;
 
 function fail(message) {
@@ -62,13 +63,22 @@ function compareVersions(left, right) {
   return 0;
 }
 
-function commandOutput(command, args, options = {}) {
-  return execFileSync(command, args, {
-    encoding: "utf8",
-    maxBuffer: 16 * 1024 * 1024,
-    stdio: ["ignore", "pipe", "pipe"],
-    ...options,
-  });
+export function commandOutput(command, args, options = {}) {
+  const timeout = options.timeout ?? COMMAND_TIMEOUT_MS;
+  try {
+    return execFileSync(command, args, {
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+      ...options,
+      timeout,
+    });
+  } catch (error) {
+    if (error?.code === "ETIMEDOUT") {
+      fail(`${command} timed out after ${timeout}ms`);
+    }
+    throw error;
+  }
 }
 
 function parseJsonOutput(command, args, options) {
@@ -119,7 +129,10 @@ async function waitForGateway(openclaw, gatewayUrl, token, env, child, diagnosti
       fail(`the isolated OpenClaw gateway exited early${diagnostics()}`);
     }
     try {
-      parseJsonOutput(openclaw, buildGatewayCallArgs("health", gatewayUrl, token, 1_000), { env });
+      parseJsonOutput(openclaw, buildGatewayCallArgs("health", gatewayUrl, token, 1_000), {
+        env,
+        timeout: 2_000,
+      });
       return;
     } catch {
       await delay(250);
@@ -142,6 +155,15 @@ function boundedDiagnostics(chunks) {
   return text ? `\nGateway diagnostics:\n${text.slice(-4_000)}` : "";
 }
 
+export async function withTemporaryRoot(run) {
+  const tempRoot = await mkdtemp(join(tmpdir(), "antigravity-host-check-"));
+  try {
+    return await run(tempRoot);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
 export async function runHostIntegrationCheck({
   openclaw = process.env.OPENCLAW_BIN?.trim() || "openclaw",
   agy = process.env.AGY_BIN?.trim() || "agy",
@@ -154,78 +176,78 @@ export async function runHostIntegrationCheck({
   }
 
   const modelIds = assertAgySession(commandOutput(agy, ["models"]));
-  const tempRoot = await mkdtemp(join(tmpdir(), "antigravity-host-check-"));
-  const stateDir = join(tempRoot, "state");
-  const configPath = join(tempRoot, "openclaw.json");
-  const port = await reserveLoopbackPort();
-  const gatewayUrl = `ws://127.0.0.1:${port}`;
-  const gatewayToken = randomBytes(24).toString("hex");
-  const env = {
-    ...process.env,
-    OPENCLAW_CONFIG_PATH: configPath,
-    OPENCLAW_CONFIG_READONLY: "1",
-    OPENCLAW_STATE_DIR: stateDir,
-  };
-  const gatewayOutput = [];
-  let gateway;
-
-  try {
-    await mkdir(stateDir, { recursive: true });
-    await writeFile(
-      configPath,
-      `${JSON.stringify(
-        {
-          gateway: { mode: "local", bind: "loopback", auth: { mode: "token" } },
-          plugins: {
-            allow: ["antigravity"],
-            load: { paths: [pluginRoot] },
-            entries: { antigravity: { enabled: true, config: { command: agy } } },
-          },
-        },
-        null,
-        2,
-      )}\n`,
-      { mode: 0o600 },
-    );
-
-    gateway = spawn(
-      openclaw,
-      [
-        "gateway",
-        "run",
-        "--port",
-        String(port),
-        "--bind",
-        "loopback",
-        "--auth",
-        "token",
-        "--token",
-        gatewayToken,
-        "--allow-unconfigured",
-      ],
-      { env, stdio: ["ignore", "pipe", "pipe"] },
-    );
-    gateway.stdout.on("data", (chunk) => gatewayOutput.push(String(chunk)));
-    gateway.stderr.on("data", (chunk) => gatewayOutput.push(String(chunk)));
-    const diagnostics = () => boundedDiagnostics(gatewayOutput);
-
-    await waitForGateway(openclaw, gatewayUrl, gatewayToken, env, gateway, diagnostics);
-    const status = parseJsonOutput(
-      openclaw,
-      buildGatewayCallArgs("models.authStatus", gatewayUrl, gatewayToken),
-      { env },
-    );
-    const action = assertReconnectProjection(status);
-    return {
-      pluginVersion: packageJson.version,
-      hostVersion: hostVersion.join("."),
-      agyModelCount: modelIds.length,
-      action,
+  return await withTemporaryRoot(async (tempRoot) => {
+    const stateDir = join(tempRoot, "state");
+    const configPath = join(tempRoot, "openclaw.json");
+    const port = await reserveLoopbackPort();
+    const gatewayUrl = `ws://127.0.0.1:${port}`;
+    const gatewayToken = randomBytes(24).toString("hex");
+    const env = {
+      ...process.env,
+      OPENCLAW_CONFIG_PATH: configPath,
+      OPENCLAW_CONFIG_READONLY: "1",
+      OPENCLAW_STATE_DIR: stateDir,
     };
-  } finally {
-    if (gateway) await stopGateway(gateway);
-    await rm(tempRoot, { recursive: true, force: true });
-  }
+    const gatewayOutput = [];
+    let gateway;
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(
+        configPath,
+        `${JSON.stringify(
+          {
+            gateway: { mode: "local", bind: "loopback", auth: { mode: "token" } },
+            plugins: {
+              allow: ["antigravity"],
+              load: { paths: [pluginRoot] },
+              entries: { antigravity: { enabled: true, config: { command: agy } } },
+            },
+          },
+          null,
+          2,
+        )}\n`,
+        { mode: 0o600 },
+      );
+
+      gateway = spawn(
+        openclaw,
+        [
+          "gateway",
+          "run",
+          "--port",
+          String(port),
+          "--bind",
+          "loopback",
+          "--auth",
+          "token",
+          "--token",
+          gatewayToken,
+          "--allow-unconfigured",
+        ],
+        { env, stdio: ["ignore", "pipe", "pipe"] },
+      );
+      gateway.stdout.on("data", (chunk) => gatewayOutput.push(String(chunk)));
+      gateway.stderr.on("data", (chunk) => gatewayOutput.push(String(chunk)));
+      const diagnostics = () => boundedDiagnostics(gatewayOutput);
+
+      await waitForGateway(openclaw, gatewayUrl, gatewayToken, env, gateway, diagnostics);
+      const status = parseJsonOutput(
+        openclaw,
+        buildGatewayCallArgs("models.authStatus", gatewayUrl, gatewayToken),
+        { env, timeout: 15_000 },
+      );
+      const action = assertReconnectProjection(status);
+      return {
+        pluginVersion: packageJson.version,
+        hostVersion: hostVersion.join("."),
+        agyModelCount: modelIds.length,
+        action,
+      };
+    } finally {
+      if (gateway) await stopGateway(gateway);
+    }
+  });
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
