@@ -144,6 +144,7 @@ test("release workflow publishes npm through trusted publishing before documenta
   const workflow = await readFile(path.join(ROOT, ".github/workflows/publish-docs.yml"), "utf8");
   for (const phrase of [
     "id-token: write",
+    "node-version: 24",
     "npm install -g npm@11",
     'npm view "@cavi-ai/antigravity@${PKG_VERSION}" version',
     "npm publish --access public --provenance",
@@ -156,4 +157,14 @@ test("release workflow publishes npm through trusted publishing before documenta
       workflow.indexOf("npm run docs:build --"),
   );
   assert.doesNotMatch(workflow, /(?:NPM_TOKEN|NODE_AUTH_TOKEN)/u);
+});
+
+test("manual backfills cannot publish npm from a mismatched provenance ref", async () => {
+  const workflow = await readFile(path.join(ROOT, ".github/workflows/publish-docs.yml"), "utf8");
+  assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/u);
+  assert.match(
+    workflow,
+    /- name: Publish package\n\s+if: \$\{\{ github\.event_name == 'release' \}\}/u,
+  );
+  assert.doesNotMatch(workflow, /inputs\.dry_run == 'false'/u);
 });
