@@ -52,6 +52,7 @@ test("package.json is ClawHub-ready and ships setup/doctor modules", () => {
   assert.ok(pkg.files.includes("setup-api.js"));
   assert.ok(pkg.files.includes("doctor-contract-api.js"));
   assert.ok(pkg.files.includes("openclaw.plugin.json"));
+  assert.ok(pkg.files.includes("scripts/check-host-integration.mjs"));
 });
 
 test("setup-api registers provider and CLI backend", () => {

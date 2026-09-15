@@ -29,6 +29,7 @@
   },
   "files": [
     "src",
+    "scripts/check-host-integration.mjs",
     "setup-api.js",
     "doctor-contract-api.js",
     "openclaw.plugin.json",
@@ -65,6 +66,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "check:host-integration": "node scripts/check-host-integration.mjs",
     "docs:test": "node --test scripts/docs/*.test.mjs",
     "docs:build": "node scripts/docs/build.mjs",
     "docs:verify": "node scripts/docs/verify.mjs",
