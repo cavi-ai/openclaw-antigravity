@@ -132,7 +132,8 @@ test("package exposes documentation commands and release workflow runs every gat
   assert.ok(workflow.indexOf("npm test") < workflow.indexOf("npm run docs:build --"));
   assert.ok(workflow.indexOf("npm run docs:verify --") < workflow.indexOf("gh api --method POST"));
   assert.match(workflow, /npm run --silent docs:release --[^\n]+> "\$envelope"/u);
-  assert.match(workflow, /GITHUB_SHA: \$\{\{ github\.sha \}\}/u);
+  assert.match(workflow, /refs\/tags\/v\{0\}/u);
+  assert.match(workflow, /commit="\$\(git rev-parse HEAD\)"/u);
   assert.match(workflow, /tag_commit/u);
   const actionRefs = [...workflow.matchAll(/uses: actions\/(?:checkout|setup-node)@([^\s]+)/gu)]
     .map((match) => match[1]);
@@ -144,7 +145,10 @@ test("release workflow publishes npm through trusted publishing before documenta
   const workflow = await readFile(path.join(ROOT, ".github/workflows/publish-docs.yml"), "utf8");
   for (const phrase of [
     "id-token: write",
+    "node-version: 24",
     "npm install -g npm@11",
+    "inputs.dry_run == 'false'",
+    "RELEASE_TAG: ${{ steps.release.outputs.tag }}",
     'npm view "@cavi-ai/antigravity@${PKG_VERSION}" version',
     "npm publish --access public --provenance",
   ]) {
