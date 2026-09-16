@@ -9,8 +9,8 @@
 - Gateway `{{OPENCLAW_MIN_GATEWAY_VERSION}}` or newer.
 - OpenClaw plugin API `2026.7` or newer (declared as
   `{{OPENCLAW_PLUGIN_API}}`).
-- Google's Antigravity CLI (`agy`) installed on the Gateway host and already
-  signed in. Confirm the live session with `agy models`.
+- Google's Antigravity CLI (`agy`) 1.2.1 or newer installed on the Gateway host
+  and already signed in. Confirm the live session with `agy models`.
 
 Install the package through OpenClaw:
 

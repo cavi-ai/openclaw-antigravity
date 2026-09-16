@@ -18,7 +18,7 @@ ingests and serves at [cavi-ai.xyz/docs/antigravity](https://cavi-ai.xyz/docs/an
 
 - OpenClaw 2026.7 or newer
 - Node.js 20 or newer
-- Antigravity CLI installed and signed in
+- Antigravity CLI 1.2.1 or newer, installed and signed in
 
 Confirm that Antigravity is ready:
 
@@ -40,7 +40,10 @@ Restart the OpenClaw Gateway after installation.
 In the Control UI, open **Models → Providers** and choose **Reconnect** on the
 Antigravity CLI card. The plugin validates the existing `agy` session and
 refreshes the provider connection without creating a credential or changing the
-default model.
+default model. Reconnect installs or refreshes the bundled
+`openclaw-antigravity-tool-free` custom agent, which OpenClaw uses only for its
+connection probe. Normal provider turns keep the configured `agy` mode and tool
+behavior.
 
 ## Use
 
@@ -124,11 +127,13 @@ npm run check:host-integration # live agy + isolated installed-host Reconnect ch
 
 The host-integration check requires a signed-in `agy` session and a compatible
 installed `openclaw` command. It runs `agy models`, starts the working-tree
-plugin in a temporary loopback-only OpenClaw state, verifies that the host
-projects **Reconnect** for Antigravity, and verifies that credential-only
-**Connect** is absent. The temporary gateway and state are removed afterward;
-the installed gateway, OpenClaw config, credentials, and default model are not
-changed. Set `AGY_BIN` or `OPENCLAW_BIN` to use a non-default executable.
+plugin in a temporary loopback-only OpenClaw state, activates the projected
+**Reconnect** action, and verifies that credential-only **Connect** is absent.
+The check links the live `agy` session into a temporary home while keeping its
+plugin configuration isolated. The temporary gateway, home, and state are
+removed afterward; the installed gateway, OpenClaw config, credentials,
+default model, and pre-existing `agy` plugins are not changed. Set `AGY_BIN` or
+`OPENCLAW_BIN` to use a non-default executable.
 
 Releasing docs is automated: publish a GitHub Release `vX.Y.Z` (matching
 `package.json`) and the `Publish release documentation` workflow builds the

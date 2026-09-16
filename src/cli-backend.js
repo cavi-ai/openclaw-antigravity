@@ -15,6 +15,7 @@
 import { ANTIGRAVITY_MODEL_ALIASES } from "./models.js";
 
 export const ANTIGRAVITY_BACKEND_ID = "antigravity-cli";
+export const TOOL_FREE_SETUP_AGENT_ID = "openclaw-antigravity-setup";
 
 /** agy print mode cannot prompt a human, so tool calls need a non-review mode. */
 export const DEFAULT_MODE = "accept-edits";
@@ -44,6 +45,17 @@ export function buildAntigravityCliBackend(options = {}) {
   const base = buildBaseArgs(options);
   return {
     id: ANTIGRAVITY_BACKEND_ID,
+    runtimeArtifact: {
+      kind: "bundled-package-tree",
+      packageName: "agy",
+      entrypoint: "command",
+      nativeExecutableNames: ["agy", "agy.exe"],
+    },
+    sideQuestionToolMode: "disabled",
+    resolveExecutionArgs: ({ baseArgs, executionMode }) =>
+      executionMode === "side-question"
+        ? [...baseArgs, "--agent", TOOL_FREE_SETUP_AGENT_ID]
+        : baseArgs,
     // Standalone backend: agy's catalog (Gemini + Claude + GPT-OSS behind one
     // subscription) belongs to no existing provider, so it owns direct
     // `antigravity-cli/<model>` refs rather than aliasing a canonical provider.

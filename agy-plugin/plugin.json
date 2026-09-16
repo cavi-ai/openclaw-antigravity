@@ -1,0 +1,9 @@
+{
+  "name": "openclaw-antigravity-tool-free",
+  "version": "1.0.0",
+  "description": "Tool-free connection probe for the OpenClaw Antigravity provider",
+  "author": {
+    "name": "CAVI"
+  },
+  "license": "MIT"
+}

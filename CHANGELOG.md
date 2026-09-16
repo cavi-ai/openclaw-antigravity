@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.4
+
+- Make the guided-discovery **Reconnect** verification tool-free by installing
+  a bundled, isolated `agy` custom agent for setup probes. Normal provider
+  turns retain the configured Antigravity mode and tool behavior.
+- Declare the native `agy` executable as the CLI backend runtime artifact so
+  current OpenClaw hosts can bind the setup probe to a durable owner.
+- Extend the installed-host integration check through Reconnect activation and
+  isolate its temporary `agy` plugin config from the user's existing plugins.
+- Require Antigravity CLI 1.2.1 or newer for hard tool-free setup probes.
+
 ## 0.2.3
 
 - Use OpenClaw's provider-owned guided discovery for Control UI reconnect, the
