@@ -21,6 +21,44 @@ test("backend drives `agy` in print mode and parses its json result", () => {
   assert.deepEqual(config.args.slice(0, 4), ["--print", "{prompt}", "--output-format", "json"]);
 });
 
+test("backend declares a hard tool-free side-question mode", () => {
+  const backend = buildAntigravityCliBackend();
+  assert.equal(backend.sideQuestionToolMode, "disabled");
+  assert.equal(typeof backend.resolveExecutionArgs, "function");
+  assert.deepEqual(
+    backend.resolveExecutionArgs({
+      baseArgs: ["--print", "{prompt}", "--output-format", "json"],
+      executionMode: "side-question",
+    }),
+    [
+      "--print",
+      "{prompt}",
+      "--output-format",
+      "json",
+      "--agent",
+      "openclaw-antigravity-setup",
+    ],
+  );
+});
+
+test("backend binds the native agy executable as its durable runtime owner", () => {
+  assert.deepEqual(buildAntigravityCliBackend().runtimeArtifact, {
+    kind: "bundled-package-tree",
+    packageName: "agy",
+    entrypoint: "command",
+    nativeExecutableNames: ["agy", "agy.exe"],
+  });
+});
+
+test("normal agent turns do not use the tool-free setup agent", () => {
+  const backend = buildAntigravityCliBackend();
+  const args = ["--print", "{prompt}", "--output-format", "json"];
+  assert.deepEqual(
+    backend.resolveExecutionArgs({ baseArgs: args, executionMode: "agent" }),
+    args,
+  );
+});
+
 test("backend resumes agy by conversation id", () => {
   const { config } = buildAntigravityCliBackend();
   assert.deepEqual(config.sessionIdFields, ["conversation_id"]);
@@ -101,8 +139,10 @@ test("guided reconnect prepares only a model currently reported by agy", async (
   const provider = buildAntigravityProvider(
     {},
     {
-      runCommand: async () =>
-        "gemini-3.8-flash-high\tGemini 3.8 Flash High\nclaude-sonnet-4-6\tClaude Sonnet 4.6\n",
+      runCommand: async (_command, args) =>
+        args[0] === "--version"
+          ? "1.2.3\n"
+          : "gemini-3.8-flash-high\tGemini 3.8 Flash High\nclaude-sonnet-4-6\tClaude Sonnet 4.6\n",
     },
   );
   const guided = provider.auth[0].appGuidedSetup;
@@ -144,6 +184,61 @@ test("guided reconnect prepares only a model currently reported by agy", async (
   );
 });
 
+test("guided reconnect installs the packaged tool-free setup agent before preparation", async () => {
+  const calls = [];
+  const provider = buildAntigravityProvider(
+    {},
+    {
+      runCommand: async (command, args) => {
+        calls.push([command, args]);
+        if (args[0] === "--version") {
+          return "1.2.3\n";
+        }
+        if (args[0] === "models") {
+          return "gemini-3.1-pro-high\tGemini 3.1 Pro High\n";
+        }
+        return "";
+      },
+    },
+  );
+
+  const result = await provider.auth[0].appGuidedSetup.prepare({
+    config: {},
+    env: {},
+    modelRef: "antigravity-cli/gemini-3.1-pro-high",
+  });
+
+  assert.equal(result.defaultModel, "antigravity-cli/gemini-3.1-pro-high");
+  assert.equal(calls[0][0], "agy");
+  assert.deepEqual(calls[0][1], ["--version"]);
+  assert.deepEqual(calls[1][1].slice(0, 2), ["plugin", "install"]);
+  assert.match(calls[1][1][2], /agy-plugin$/u);
+  assert.deepEqual(calls[2], ["agy", ["models"]]);
+});
+
+test("guided reconnect rejects agy versions without tool-free custom agents", async () => {
+  const calls = [];
+  const provider = buildAntigravityProvider(
+    {},
+    {
+      runCommand: async (_command, args) => {
+        calls.push(args);
+        return "1.2.0\n";
+      },
+    },
+  );
+
+  assert.equal(
+    await provider.auth[0].appGuidedSetup.prepare({
+      config: {},
+      env: {},
+      modelRef: "antigravity-cli/gemini-3.1-pro-high",
+    }),
+    null,
+  );
+  assert.deepEqual(calls, [["--version"]]);
+});
+
 test("guided reconnect reports unavailable agy without inventing a credential", async () => {
   const provider = buildAntigravityProvider(
     {},
@@ -182,7 +277,10 @@ test("guided reconnect propagates cancellation", async () => {
 test("interactive reconnect returns the CLI-owned model without storing auth", async () => {
   const provider = buildAntigravityProvider(
     {},
-    { runCommand: async () => "gemini-3.1-pro-high\tGemini 3.1 Pro High\n" },
+    {
+      runCommand: async (_command, args) =>
+        args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
+    },
   );
 
   assert.deepEqual(await provider.auth[0].run({ config: {}, env: {} }), {
@@ -206,7 +304,10 @@ test("interactive reconnect returns the CLI-owned model without storing auth", a
 test("reconnect preserves explicit provider settings and mode while refreshing connection", async () => {
   const provider = buildAntigravityProvider(
     {},
-    { runCommand: async () => "gemini-3.1-pro-high\tGemini 3.1 Pro High\n" },
+    {
+      runCommand: async (_command, args) =>
+        args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
+    },
   );
   const config = {
     models: {

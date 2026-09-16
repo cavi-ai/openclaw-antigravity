@@ -4,6 +4,8 @@
 // validates that CLI-owned session and records the provider's non-secret
 // connection (models, endpoint) in config; OpenClaw stores no key for this provider.
 import { execFile } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { ANTIGRAVITY_BACKEND_ID } from "./cli-backend.js";
 import {
@@ -18,6 +20,12 @@ export const ANTIGRAVITY_PROVIDER_ID = ANTIGRAVITY_BACKEND_ID;
 const execFileAsync = promisify(execFile);
 const COMMAND_TIMEOUT_MS = 15_000;
 const COMMAND_MAX_BUFFER_BYTES = 1_048_576;
+const MINIMUM_TOOL_FREE_AGY_VERSION = [1, 2, 1];
+const TOOL_FREE_SETUP_PLUGIN_ROOT = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "agy-plugin",
+);
 
 const MISSING_AUTH_MESSAGE =
   "Antigravity CLI is not ready. Install Google's Antigravity CLI (`agy`), sign in with your Google subscription, then confirm with `agy models`. This provider stores no API key in OpenClaw.";
@@ -40,6 +48,20 @@ function throwIfAborted(signal) {
 
 function isAbortError(error, signal) {
   return signal?.aborted === true || error?.name === "AbortError" || error?.code === "ABORT_ERR";
+}
+
+function supportsToolFreeSetupAgent(output) {
+  const match = /(\d+)\.(\d+)\.(\d+)/u.exec(String(output ?? ""));
+  if (!match) {
+    return false;
+  }
+  const version = match.slice(1).map(Number);
+  for (let index = 0; index < version.length; index += 1) {
+    if (version[index] !== MINIMUM_TOOL_FREE_AGY_VERSION[index]) {
+      return version[index] > MINIMUM_TOOL_FREE_AGY_VERSION[index];
+    }
+  }
+  return true;
 }
 
 /** Extracts model ids from the human-readable `agy models` table. */
@@ -75,6 +97,16 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     const output = await execute(command, ["models"], context);
     throwIfAborted(context.signal);
     return parseAntigravityModelIds(output);
+  };
+
+  const installToolFreeSetupAgent = async (context) => {
+    throwIfAborted(context.signal);
+    const version = await execute(command, ["--version"], context);
+    if (!supportsToolFreeSetupAgent(version)) {
+      throw new Error("Antigravity CLI 1.2.1 or newer is required for tool-free setup checks.");
+    }
+    await execute(command, ["plugin", "install", TOOL_FREE_SETUP_PLUGIN_ROOT], context);
+    throwIfAborted(context.signal);
   };
 
   const detect = async (context) => {
@@ -138,9 +170,9 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
           detectAvailability: async (context) => {
             try {
               throwIfAborted(context.signal);
-              await execute(command, ["--version"], context);
+              const version = await execute(command, ["--version"], context);
               throwIfAborted(context.signal);
-              return true;
+              return supportsToolFreeSetupAgent(version);
             } catch (error) {
               if (isAbortError(error, context.signal)) {
                 throw error;
@@ -156,6 +188,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
             }
             const modelId = context.modelRef.slice(prefix.length);
             try {
+              await installToolFreeSetupAgent(context);
               const available = await listModels(context);
               return available.includes(modelId)
                 ? validatedResult(context.modelRef, context.config)
@@ -169,6 +202,14 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
           },
         },
         run: async (context) => {
+          try {
+            await installToolFreeSetupAgent(context);
+          } catch (error) {
+            if (isAbortError(error, context.signal)) {
+              throw error;
+            }
+            throw new Error(RECONNECT_ERROR_MESSAGE);
+          }
           const detected = await detect(context);
           if (!detected) {
             throw new Error(RECONNECT_ERROR_MESSAGE);

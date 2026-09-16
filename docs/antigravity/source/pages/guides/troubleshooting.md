@@ -18,6 +18,12 @@ Run `agy models` in the Gateway environment. If the shell finds a different
 binary or no binary, set `plugins.entries.antigravity.config.command` to the
 absolute path of the intended executable.
 
+## Reconnect reports that hard tool-free mode is unavailable
+
+Install `agy` 1.2.1 or newer. Reconnect uses a bundled custom agent with
+built-in components excluded so OpenClaw can run its connection probe without
+tools.
+
 ## Authentication fails
 
 Follow the authentication recovery procedure: sign in through `agy`, verify

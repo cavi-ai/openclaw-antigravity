@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { access } from "node:fs/promises";
+import { access, mkdir, readlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
 import {
   assertAgySession,
   assertReconnectProjection,
   buildGatewayCallArgs,
   commandOutput,
+  createIsolatedAgyHome,
   withTemporaryRoot,
 } from "../scripts/check-host-integration.mjs";
 
@@ -44,6 +46,25 @@ test("isolated gateway calls carry their ephemeral token", () => {
       "1000",
     ],
   );
+});
+
+test("host check isolates agy plugin config while retaining live session state", async () => {
+  await withTemporaryRoot(async (root) => {
+    const sourceHome = join(root, "source-home");
+    const sourceGemini = join(sourceHome, ".gemini");
+    await mkdir(join(sourceGemini, "config", "plugins"), { recursive: true });
+    await mkdir(join(sourceGemini, "antigravity-cli"), { recursive: true });
+    await writeFile(join(sourceGemini, "config", "import_manifest.json"), "original\n");
+    await writeFile(join(sourceGemini, "antigravity-cli", "session"), "live\n");
+
+    const isolatedHome = await createIsolatedAgyHome(join(root, "check"), sourceHome);
+    const isolatedGemini = join(isolatedHome, ".gemini");
+    assert.equal(
+      await readlink(join(isolatedGemini, "antigravity-cli")),
+      join(sourceGemini, "antigravity-cli"),
+    );
+    await assert.rejects(access(join(isolatedGemini, "config", "import_manifest.json")));
+  });
 });
 
 test("live agy models and guided discovery project only Reconnect", () => {
