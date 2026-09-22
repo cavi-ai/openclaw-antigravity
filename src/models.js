@@ -1,28 +1,32 @@
 // Model catalog for Google's Antigravity CLI (`agy`).
 //
-// The static list is the last known `agy models` snapshot. Live discovery
-// returns the ids the signed-in CLI reports. Those ids are not written into
-// OpenClaw config. Unknown ids still pass through to `--model` verbatim.
+// The static list is one OpenClaw id per model. `agy models` prints effort
+// suffixes; those collapse here. Thinking level is `agy --effort`, except
+// Claude, which rejects that flag. Opus is sent to agy as
+// `claude-opus-4-6-thinking`. Catalog rows are not written into OpenClaw config.
 
-/** agy's own model ids, from `agy models`. */
+const EFFORT_SUFFIX = /-(?:high|medium|low)$/u;
+
+/**
+ * agy ids that are not the OpenClaw id. Claude Opus is only recognized as
+ * `claude-opus-4-6-thinking`, and `--effort` is rejected for Claude models.
+ */
+const TRANSPORT_MODEL_IDS = {
+  "claude-opus-4-6": "claude-opus-4-6-thinking",
+};
+
+/** OpenClaw catalog ids. One row per model; effort is not part of the id. */
 export const ANTIGRAVITY_MODEL_IDS = [
-  "gemini-3.8-flash-high",
-  "gemini-3.8-flash-medium",
-  "gemini-3.8-flash-low",
-  "gemini-3.7-flash-high",
-  "gemini-3.7-flash-medium",
-  "gemini-3.7-flash-low",
-  "gemini-3.6-flash-high",
-  "gemini-3.6-flash-medium",
-  "gemini-3.6-flash-low",
-  "gemini-3.1-pro-high",
-  "gemini-3.1-pro-low",
+  "gemini-3.8-flash",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.1-pro",
   "claude-sonnet-4-6",
-  "claude-opus-4-6-thinking",
-  "gpt-oss-120b-medium",
+  "claude-opus-4-6",
+  "gpt-oss-120b",
 ];
 
-export const ANTIGRAVITY_DEFAULT_MODEL = "gemini-3.1-pro-high";
+export const ANTIGRAVITY_DEFAULT_MODEL = "gemini-3.1-pro";
 
 /**
  * Placeholder endpoint for the catalog row. `agy` owns the transport, so this is
@@ -40,13 +44,47 @@ export const ANTIGRAVITY_MODEL_API = "openai-completions";
  * are expanded by the CLI backend before launch.
  */
 export const ANTIGRAVITY_MODEL_ALIASES = {
-  pro: "gemini-3.1-pro-high",
-  flash: "gemini-3.8-flash-medium",
-  "flash-lite": "gemini-3.8-flash-low",
+  pro: "gemini-3.1-pro",
+  flash: "gemini-3.8-flash",
+  "flash-lite": "gemini-3.8-flash",
   sonnet: "claude-sonnet-4-6",
-  opus: "claude-opus-4-6-thinking",
-  "gpt-oss": "gpt-oss-120b-medium",
+  opus: "claude-opus-4-6",
+  "gpt-oss": "gpt-oss-120b",
 };
+
+/** Drops an effort suffix. `-thinking` stays until transport resolution. */
+export function openClawModelId(modelId) {
+  const id = typeof modelId === "string" ? modelId.trim() : "";
+  return id.replace(EFFORT_SUFFIX, "");
+}
+
+/** Collapses effort-qualified `agy models` rows into OpenClaw catalog ids. */
+export function normalizeAntigravityModelIds(modelIds) {
+  const ids = [];
+  for (const raw of modelIds ?? []) {
+    const agyId = typeof raw === "string" ? raw.trim() : "";
+    const id = openClawModelId(agyId.replace(/-thinking$/u, ""));
+    if (!id || ids.includes(id)) {
+      continue;
+    }
+    ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * Model id passed to `agy --model`. Gemini and GPT-OSS use the OpenClaw id.
+ * Claude Opus is sent as the only id agy recognizes.
+ */
+export function resolveAntigravityTransportModelId(modelId) {
+  const id = openClawModelId(String(modelId ?? "").replace(/-thinking$/u, ""));
+  return TRANSPORT_MODEL_IDS[id] ?? id;
+}
+
+/** Claude models reject `agy --effort`. Gemini and GPT-OSS accept it. */
+export function antigravityModelSupportsEffort(modelId) {
+  return !openClawModelId(modelId).startsWith("claude-");
+}
 
 // Context windows are conservative floors, not published figures — Antigravity
 // documents no per-model limits for the CLI. They exist so OpenClaw budgets and
@@ -67,13 +105,12 @@ function contextWindowFor(modelId) {
   return CONTEXT_WINDOW_FLOOR.other;
 }
 
-/** Turns an agy model id into a human label, e.g. `gemini-3.1-pro-high` → `Gemini 3.1 Pro (high)`. */
+/** Turns an OpenClaw model id into a human label, e.g. `gemini-3.1-pro` → `Gemini 3.1 Pro`. */
 export function labelForModelId(modelId) {
-  const match = /^(.*)-(high|medium|low|thinking)$/.exec(modelId);
-  const base = match ? match[1] : modelId;
-  const suffix = match ? match[2] : undefined;
-  const words = base
+  const base = openClawModelId(String(modelId ?? "").replace(/-thinking$/u, ""));
+  return base
     .split("-")
+    .filter(Boolean)
     .map((part) => {
       if (part === "gpt") return "GPT";
       if (part === "oss") return "OSS";
@@ -81,7 +118,6 @@ export function labelForModelId(modelId) {
       return part.charAt(0).toUpperCase() + part.slice(1);
     })
     .join(" ");
-  return suffix ? `${words} (${suffix})` : words;
 }
 
 /** Builds one picker row for an agy model id. */
@@ -109,13 +145,6 @@ export function catalogEntryForModelId(modelId) {
  * @param {string[]} [modelIds]
  */
 export function buildAntigravityModelCatalog(modelIds = ANTIGRAVITY_MODEL_IDS) {
-  const ids = [];
-  for (const raw of modelIds) {
-    const id = typeof raw === "string" ? raw.trim() : "";
-    if (!id || ids.includes(id)) {
-      continue;
-    }
-    ids.push(id);
-  }
+  const ids = normalizeAntigravityModelIds(modelIds);
   return (ids.length > 0 ? ids : ANTIGRAVITY_MODEL_IDS).map(catalogEntryForModelId);
 }

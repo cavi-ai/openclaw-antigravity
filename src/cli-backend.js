@@ -15,7 +15,11 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, isAbsolute, join } from "node:path";
-import { ANTIGRAVITY_MODEL_ALIASES } from "./models.js";
+import {
+  ANTIGRAVITY_MODEL_ALIASES,
+  antigravityModelSupportsEffort,
+  resolveAntigravityTransportModelId,
+} from "./models.js";
 
 export const ANTIGRAVITY_BACKEND_ID = "antigravity-cli";
 export const TOOL_FREE_SETUP_AGENT_ID = "openclaw-antigravity-setup";
@@ -169,10 +173,17 @@ export function buildAntigravityCliBackend(options = {}) {
       nativeExecutableNames: ["agy", "agy.exe"],
     },
     sideQuestionToolMode: "disabled",
-    resolveExecutionArgs: ({ baseArgs, executionMode, thinkingLevel }) =>
-      executionMode === "side-question"
-        ? [...baseArgs, "--agent", TOOL_FREE_SETUP_AGENT_ID]
-        : resolveAntigravityEffortArgs(baseArgs, thinkingLevel),
+    resolveExecutionArgs: ({ baseArgs, executionMode, thinkingLevel, modelId }) => {
+      if (executionMode === "side-question") {
+        return [...baseArgs, "--agent", TOOL_FREE_SETUP_AGENT_ID];
+      }
+      // Claude rejects `agy --effort`. Gemini and GPT-OSS accept low|medium|high.
+      if (!antigravityModelSupportsEffort(modelId)) {
+        return resolveAntigravityEffortArgs(baseArgs, "off");
+      }
+      return resolveAntigravityEffortArgs(baseArgs, thinkingLevel);
+    },
+    resolveModelId: ({ modelId }) => resolveAntigravityTransportModelId(modelId),
     // Standalone backend: omit modelProvider. Setting it, even to this backend's
     // own id, registers a CLI runtime alias and the model picker hides the provider.
     // Direct `antigravity-cli/<model>` refs stay selectable.

@@ -19,6 +19,8 @@ import {
   ANTIGRAVITY_MODEL_ALIASES,
   ANTIGRAVITY_MODEL_API,
   buildAntigravityModelCatalog,
+  normalizeAntigravityModelIds,
+  openClawModelId,
 } from "./models.js";
 
 export const ANTIGRAVITY_PROVIDER_ID = ANTIGRAVITY_BACKEND_ID;
@@ -134,7 +136,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     }
     const output = await execute(command, ["models"], context);
     throwIfAborted(context.signal);
-    const ids = parseAntigravityModelIds(output);
+    const ids = normalizeAntigravityModelIds(parseAntigravityModelIds(output));
     liveModelCache = { at: now, ids };
     return ids;
   };
@@ -229,12 +231,14 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
             if (!context.modelRef.startsWith(prefix)) {
               return null;
             }
-            const modelId = context.modelRef.slice(prefix.length);
+            const modelId = openClawModelId(
+              context.modelRef.slice(prefix.length).replace(/-thinking$/u, ""),
+            );
             try {
               await installToolFreeSetupAgent(context);
               const available = await listModels({ ...context, refresh: true });
               return available.includes(modelId)
-                ? validatedResult(context.modelRef, context.config)
+                ? validatedResult(`${prefix}${modelId}`, context.config)
                 : null;
             } catch (error) {
               if (isAbortError(error, context.signal)) {
@@ -333,7 +337,8 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
       if (!modelId) {
         return null;
       }
-      const resolved = ANTIGRAVITY_MODEL_ALIASES[modelId] ?? modelId;
+      const aliased = ANTIGRAVITY_MODEL_ALIASES[modelId] ?? modelId;
+      const resolved = openClawModelId(aliased.replace(/-thinking$/u, ""));
       return {
         id: resolved,
         provider: ANTIGRAVITY_PROVIDER_ID,

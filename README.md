@@ -47,39 +47,33 @@ OpenClaw uses only for its connection probe. Normal provider turns keep the
 configured `agy` mode and tool behavior.
 
 Thinking level is a separate param and is passed as `agy --effort`
-(`low`, `medium`, `high`). `off` omits the flag.
+(`low`, `medium`, `high`) for Gemini and GPT-OSS. `off` omits the flag.
+Claude models reject `--effort`, so the flag is omitted for them.
 
 ## Use
 
 Models use the `antigravity-cli/<model>` format:
 
 ```bash
-openclaw agent --model antigravity-cli/gemini-3.1-pro-high -m "hello"
+openclaw agent --model antigravity-cli/gemini-3.1-pro -m "hello"
 ```
 
 If your OpenClaw configuration uses `agents.defaults.modelPolicy.allow`, add the models you want to use or allow `antigravity-cli/*`.
 
 ### Models
 
-Run `agy models` for the live list. Discovery uses those ids. The static
-fallback snapshot is:
+Run `agy models` for the live list. Effort suffixes on those rows are not
+model ids. The static fallback snapshot is:
 
 | Model | Alias |
 | --- | --- |
-| `gemini-3.8-flash-high` | |
-| `gemini-3.8-flash-medium` | `flash` |
-| `gemini-3.8-flash-low` | `flash-lite` |
-| `gemini-3.7-flash-high` | |
-| `gemini-3.7-flash-medium` | |
-| `gemini-3.7-flash-low` | |
-| `gemini-3.6-flash-high` | |
-| `gemini-3.6-flash-medium` | |
-| `gemini-3.6-flash-low` | |
-| `gemini-3.1-pro-high` | `pro` (default) |
-| `gemini-3.1-pro-low` | |
+| `gemini-3.8-flash` | `flash`, `flash-lite` |
+| `gemini-3.7-flash` | |
+| `gemini-3.6-flash` | |
+| `gemini-3.1-pro` | `pro` (default) |
 | `claude-sonnet-4-6` | `sonnet` |
-| `claude-opus-4-6-thinking` | `opus` |
-| `gpt-oss-120b-medium` | `gpt-oss` |
+| `claude-opus-4-6` | `opus` |
+| `gpt-oss-120b` | `gpt-oss` |
 
 New model IDs that are not yet in the catalog are passed through to `agy`.
 

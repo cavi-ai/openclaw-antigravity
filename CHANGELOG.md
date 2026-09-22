@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.8
+
+- Publish one catalog id per model. `agy` effort suffixes are not part of the
+  OpenClaw model id; thinking level stays on `agy --effort`. Claude omits
+  `--effort`. Opus is sent to `agy` as `claude-opus-4-6-thinking`.
+
 ## 0.2.7
 
 - Keep `antigravity-cli` selectable in `openclaw configure` and load its catalog
