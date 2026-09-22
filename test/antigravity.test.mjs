@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildAntigravityCliBackend } from "../src/cli-backend.js";
+import {
+  buildAntigravityCliBackend,
+  buildAntigravityCommandEnv,
+  resolveAntigravityCommand,
+  resolveAntigravityEffortArgs,
+} from "../src/cli-backend.js";
 import {
   ANTIGRAVITY_BASE_URL,
   ANTIGRAVITY_MODEL_API,
@@ -9,6 +14,7 @@ import {
   labelForModelId,
 } from "../src/models.js";
 import {
+  ANTIGRAVITY_THINKING_PROFILE,
   buildAntigravityProvider,
   parseAntigravityModelIds,
 } from "../src/provider.js";
@@ -16,9 +22,45 @@ import { plugin } from "../src/index.js";
 
 test("backend drives `agy` in print mode and parses its json result", () => {
   const { config } = buildAntigravityCliBackend();
-  assert.equal(config.command, "agy");
+  assert.match(config.command, /(^|[\\/])agy(\.exe)?$/u);
   assert.equal(config.output, "json");
   assert.deepEqual(config.args.slice(0, 4), ["--print", "{prompt}", "--output-format", "json"]);
+});
+
+test("resolves agy from ~/.local/bin when the Gateway PATH omits it", () => {
+  const home = "/Users/fixture";
+  const expected = `${home}/.local/bin/agy`;
+  assert.equal(
+    resolveAntigravityCommand("agy", { HOME: home, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" }, (path) =>
+      path === expected,
+    ),
+    expected,
+  );
+});
+
+test("prefers an agy already on PATH over the installer fallback", () => {
+  assert.equal(
+    resolveAntigravityCommand("agy", { HOME: "/Users/fixture", PATH: "/opt/bin:/usr/bin" }, (path) =>
+      path === "/opt/bin/agy",
+    ),
+    "/opt/bin/agy",
+  );
+});
+
+test("keeps an explicit absolute agy path", () => {
+  assert.equal(
+    resolveAntigravityCommand("/opt/custom-agy", { PATH: "/usr/bin" }, () => false),
+    "/opt/custom-agy",
+  );
+});
+
+test("puts the agy installer location on PATH for Gateway exec", () => {
+  const env = buildAntigravityCommandEnv({
+    HOME: "/Users/fixture",
+    PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+  });
+  assert.equal(env.HOME, "/Users/fixture");
+  assert.match(env.PATH, /(^|:)\/Users\/fixture\/\.local\/bin(:|$)/u);
 });
 
 test("backend declares a hard tool-free side-question mode", () => {
@@ -59,6 +101,59 @@ test("normal agent turns do not use the tool-free setup agent", () => {
   );
 });
 
+test("thinking level maps to agy --effort and is omitted when off or unset", () => {
+  const baseArgs = ["--print", "{prompt}", "--output-format", "json", "--effort", "low"];
+  assert.deepEqual(resolveAntigravityEffortArgs(baseArgs, "high"), [
+    "--print",
+    "{prompt}",
+    "--output-format",
+    "json",
+    "--effort",
+    "high",
+  ]);
+  assert.deepEqual(resolveAntigravityEffortArgs(baseArgs, "medium"), [
+    "--print",
+    "{prompt}",
+    "--output-format",
+    "json",
+    "--effort",
+    "medium",
+  ]);
+  assert.deepEqual(resolveAntigravityEffortArgs(baseArgs, "low"), [
+    "--print",
+    "{prompt}",
+    "--output-format",
+    "json",
+    "--effort",
+    "low",
+  ]);
+  assert.deepEqual(resolveAntigravityEffortArgs(baseArgs, "off"), [
+    "--print",
+    "{prompt}",
+    "--output-format",
+    "json",
+  ]);
+  assert.deepEqual(resolveAntigravityEffortArgs(baseArgs, undefined), [
+    "--print",
+    "{prompt}",
+    "--output-format",
+    "json",
+  ]);
+  assert.deepEqual(resolveAntigravityEffortArgs(["--print", "--effort=high"], "xhigh"), ["--print"]);
+});
+
+test("side-question does not add --effort", () => {
+  const backend = buildAntigravityCliBackend();
+  assert.deepEqual(
+    backend.resolveExecutionArgs({
+      baseArgs: ["--print", "{prompt}"],
+      executionMode: "side-question",
+      thinkingLevel: "high",
+    }),
+    ["--print", "{prompt}", "--agent", "openclaw-antigravity-setup"],
+  );
+});
+
 test("backend resumes agy by conversation id", () => {
   const { config } = buildAntigravityCliBackend();
   assert.deepEqual(config.sessionIdFields, ["conversation_id"]);
@@ -80,6 +175,7 @@ test("backend owns direct antigravity-cli/<model> refs rather than aliasing a pr
 test("backend exposes short model aliases agy itself does not accept", () => {
   const { modelAliases } = buildAntigravityCliBackend().config;
   assert.equal(modelAliases.pro, "gemini-3.1-pro-high");
+  assert.equal(modelAliases.flash, "gemini-3.8-flash-medium");
   assert.equal(modelAliases.opus, "claude-opus-4-6-thinking");
   for (const id of Object.values(modelAliases)) {
     assert.ok(ANTIGRAVITY_MODEL_IDS.includes(id), `alias target ${id} is not a real agy model`);
@@ -163,7 +259,6 @@ test("guided reconnect prepares only a model currently reported by agy", async (
             "antigravity-cli": {
               baseUrl: ANTIGRAVITY_BASE_URL,
               api: ANTIGRAVITY_MODEL_API,
-              models: buildAntigravityModelCatalog(),
             },
           },
         },
@@ -254,7 +349,7 @@ test("guided reconnect reports unavailable agy without inventing a credential", 
   assert.equal(await provider.auth[0].appGuidedSetup.detectAvailability(context), false);
   await assert.rejects(
     provider.auth[0].run(context),
-    /Run `agy` in a terminal to sign in, then choose Reconnect again/,
+    /agy was not found|Run `agy` in a terminal to sign in, then choose Reconnect again/,
   );
 });
 
@@ -293,7 +388,6 @@ test("interactive reconnect returns the CLI-owned model without storing auth", a
           "antigravity-cli": {
             baseUrl: ANTIGRAVITY_BASE_URL,
             api: ANTIGRAVITY_MODEL_API,
-            models: buildAntigravityModelCatalog(),
           },
         },
       },
@@ -301,7 +395,7 @@ test("interactive reconnect returns the CLI-owned model without storing auth", a
   });
 });
 
-test("reconnect preserves explicit provider settings and mode while refreshing connection", async () => {
+test("reconnect preserves explicit provider settings and does not write model rows", async () => {
   const provider = buildAntigravityProvider(
     {},
     {
@@ -336,7 +430,6 @@ test("reconnect preserves explicit provider settings and mode while refreshing c
           api: ANTIGRAVITY_MODEL_API,
           timeoutSeconds: 90,
           params: { owner: "user" },
-          models: [{ id: "pinned-model" }],
         },
       },
     },
@@ -362,7 +455,41 @@ test("provider catalog covers every listed agy model", async () => {
   assert.equal(result.provider.api, ANTIGRAVITY_MODEL_API);
   for (const model of result.provider.models) {
     assert.equal(model.api, ANTIGRAVITY_MODEL_API);
+    assert.equal(model.reasoning, true);
   }
+});
+
+test("thinking profile is off, low, medium, and high", () => {
+  assert.deepEqual(
+    buildAntigravityProvider().resolveThinkingProfile().levels.map((level) => level.id),
+    ["off", "low", "medium", "high"],
+  );
+  assert.equal(ANTIGRAVITY_THINKING_PROFILE.levels.length, 4);
+});
+
+test("reconnect keeps a models include and drops a model array", async () => {
+  const provider = buildAntigravityProvider(
+    {},
+    {
+      runCommand: async (_command, args) =>
+        args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
+    },
+  );
+  const result = await provider.auth[0].run({
+    config: {
+      models: {
+        providers: {
+          "antigravity-cli": {
+            models: { $include: "./config/models/antigravity-cli.json5" },
+          },
+        },
+      },
+    },
+    env: {},
+  });
+  assert.deepEqual(result.configPatch.models.providers["antigravity-cli"].models, {
+    $include: "./config/models/antigravity-cli.json5",
+  });
 });
 
 test("catalog matches the model ids reported by agy 1.1.25", () => {
@@ -388,6 +515,8 @@ test("dynamic models carry required catalog shape fields", () => {
   const model = buildAntigravityProvider().resolveDynamicModel({ modelId: "gemini-4-pro-high" });
   assert.equal(model.baseUrl, ANTIGRAVITY_BASE_URL);
   assert.equal(model.api, ANTIGRAVITY_MODEL_API);
+  assert.equal(model.reasoning, true);
+  assert.equal(model.id, "gemini-4-pro-high");
 });
 
 test("catalog reports zero per-token cost because Antigravity bills by subscription", () => {
@@ -480,4 +609,44 @@ test("plugin passes its config through to the backend", () => {
     },
   });
   assert.equal(backend.config.command, "/opt/agy");
+});
+
+test("live catalog uses the models currently reported by agy", async () => {
+  const provider = buildAntigravityProvider(
+    {},
+    {
+      runCommand: async (_command, args) =>
+        args[0] === "models"
+          ? "gemini-3.8-flash-high\tGemini 3.8 Flash High\nclaude-sonnet-4-6\tClaude Sonnet 4.6\n"
+          : "1.2.8\n",
+    },
+  );
+  const result = await provider.catalog.run({ config: {}, env: {} });
+  assert.deepEqual(
+    result.provider.models.map((model) => model.id),
+    ["gemini-3.8-flash-high", "claude-sonnet-4-6"],
+  );
+  assert.equal(result.provider.defaultModel, "gemini-3.8-flash-high");
+});
+
+test("live catalog falls back to the static catalog when agy cannot list models", async () => {
+  const provider = buildAntigravityProvider(
+    {},
+    {
+      runCommand: async () => {
+        throw new Error("not logged in");
+      },
+    },
+  );
+  const result = await provider.catalog.run({ config: {}, env: {} });
+  assert.deepEqual(
+    result.provider.models.map((model) => model.id),
+    ANTIGRAVITY_MODEL_IDS,
+  );
+});
+
+test("cli provider does not register usage hooks", () => {
+  const provider = buildAntigravityProvider();
+  assert.equal(provider.resolveUsageAuth, undefined);
+  assert.equal(provider.fetchUsageSnapshot, undefined);
 });

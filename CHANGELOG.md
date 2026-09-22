@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.6
+
+- Refresh the Antigravity model catalog from live `agy models`. Reconnect
+  records the endpoint and does not write model rows into config.
+- Treat thinking as the OpenClaw thinking param. `off` omits `agy --effort`;
+  `low`, `medium`, and `high` set it. Model ids are unchanged.
+
+## 0.2.5
+
+- Resolve `agy` from `~/.local/bin` when the Gateway service PATH does not
+  include it, so Reconnect and CLI inference work from launchd/systemd instead
+  of reporting a false "sign in" failure.
+
 ## 0.2.4
 
 - Make the guided-discovery **Reconnect** verification tool-free by installing

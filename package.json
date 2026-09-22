@@ -1,6 +1,6 @@
 {
   "name": "@cavi-ai/antigravity",
-  "version": "0.2.4",
+  "version": "0.2.6",
   "description": "Runs Google's Antigravity CLI (agy) as a subscription-backed OpenClaw model provider.",
   "keywords": [
     "openclaw",

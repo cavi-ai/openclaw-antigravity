@@ -38,12 +38,16 @@ Restart the OpenClaw Gateway after installation.
 ## Connect
 
 In the Control UI, open **Models → Providers** and choose **Reconnect** on the
-Antigravity CLI card. The plugin validates the existing `agy` session and
-refreshes the provider connection without creating a credential or changing the
-default model. Reconnect installs or refreshes the bundled
-`openclaw-antigravity-tool-free` custom agent, which OpenClaw uses only for its
-connection probe. Normal provider turns keep the configured `agy` mode and tool
-behavior.
+Antigravity CLI card. The plugin validates the existing `agy` session. Model
+rows come from `agy models` through the plugin catalog and are not written
+into config. It does not create a credential or change the default model.
+Reconnect installs
+or refreshes the bundled `openclaw-antigravity-tool-free` custom agent, which
+OpenClaw uses only for its connection probe. Normal provider turns keep the
+configured `agy` mode and tool behavior.
+
+Thinking level is a separate param and is passed as `agy --effort`
+(`low`, `medium`, `high`). `off` omits the flag.
 
 ## Use
 
@@ -57,19 +61,20 @@ If your OpenClaw configuration uses `agents.defaults.modelPolicy.allow`, add the
 
 ### Models
 
-Run `agy models` for the live list. The plugin includes this catalog from `agy` 1.1.25:
+Run `agy models` for the live list. Discovery uses those ids. The static
+fallback snapshot is:
 
 | Model | Alias |
 | --- | --- |
 | `gemini-3.8-flash-high` | |
-| `gemini-3.8-flash-medium` | |
-| `gemini-3.8-flash-low` | |
+| `gemini-3.8-flash-medium` | `flash` |
+| `gemini-3.8-flash-low` | `flash-lite` |
 | `gemini-3.7-flash-high` | |
 | `gemini-3.7-flash-medium` | |
 | `gemini-3.7-flash-low` | |
 | `gemini-3.6-flash-high` | |
-| `gemini-3.6-flash-medium` | `flash` |
-| `gemini-3.6-flash-low` | `flash-lite` |
+| `gemini-3.6-flash-medium` | |
+| `gemini-3.6-flash-low` | |
 | `gemini-3.1-pro-high` | `pro` (default) |
 | `gemini-3.1-pro-low` | |
 | `claude-sonnet-4-6` | `sonnet` |

@@ -17,3 +17,5 @@ replace the Antigravity CLI login flow.
 
 Use models as `antigravity-cli/<model>`. The model id is handed to `agy`, which
 is the source of truth for the models available to the signed-in account.
+Discovery refreshes that catalog from `agy models`. Reconnect does not write
+model rows into config. Thinking level is passed as `agy --effort`.

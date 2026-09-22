@@ -33,7 +33,8 @@ with `agy models`, and keep credentials out of OpenClaw configuration.
 
 Use `antigravity-cli/<model>` and check
 `agents.defaults.modelPolicy.allow`. An allowlist must include the selected
-model or `antigravity-cli/*`.
+model or `antigravity-cli/*`. After `agy` adds or removes models, discovery
+reads the new ids; the allowlist still has to include them.
 
 ## A tool call waits for approval
 

@@ -1,9 +1,8 @@
 // Model catalog for Google's Antigravity CLI (`agy`).
 //
-// The list mirrors `agy models` as of agy 1.1.25. agy publishes no machine-readable
-// catalog, so ids are refreshed by hand — run `agy models` after an `agy update`
-// and reconcile. Unknown ids still work: they are passed through to `--model`
-// verbatim, so a new agy model is usable before it is listed here.
+// The static list is the last known `agy models` snapshot. Live discovery
+// returns the ids the signed-in CLI reports. Those ids are not written into
+// OpenClaw config. Unknown ids still pass through to `--model` verbatim.
 
 /** agy's own model ids, from `agy models`. */
 export const ANTIGRAVITY_MODEL_IDS = [
@@ -42,8 +41,8 @@ export const ANTIGRAVITY_MODEL_API = "openai-completions";
  */
 export const ANTIGRAVITY_MODEL_ALIASES = {
   pro: "gemini-3.1-pro-high",
-  flash: "gemini-3.6-flash-medium",
-  "flash-lite": "gemini-3.6-flash-low",
+  flash: "gemini-3.8-flash-medium",
+  "flash-lite": "gemini-3.8-flash-low",
   sonnet: "claude-sonnet-4-6",
   opus: "claude-opus-4-6-thinking",
   "gpt-oss": "gpt-oss-120b-medium",
@@ -85,21 +84,38 @@ export function labelForModelId(modelId) {
   return suffix ? `${words} (${suffix})` : words;
 }
 
-/** Builds the catalog entries OpenClaw shows in model pickers. */
-export function buildAntigravityModelCatalog() {
-  return ANTIGRAVITY_MODEL_IDS.map((id) => ({
-    id,
-    name: labelForModelId(id),
+/** Builds one picker row for an agy model id. */
+export function catalogEntryForModelId(modelId) {
+  return {
+    id: modelId,
+    name: labelForModelId(modelId),
     api: ANTIGRAVITY_MODEL_API,
-    // Thinking-tier ids and the pro tiers reason; the flash-low tiers do not
-    // advertise it. Treat everything except the explicit `-low` tiers as reasoning.
-    reasoning: !id.endsWith("-low"),
+    // Capability flag only. The selected thinking level is a separate param
+    // mapped to `agy --effort`, not a suffix of this id.
+    reasoning: true,
     input: ["text"],
-    contextWindow: contextWindowFor(id),
+    contextWindow: contextWindowFor(modelId),
     maxTokens: 64_000,
     // Antigravity is subscription-billed, not metered per token, so there is no
     // per-token price to report. Zero here means "not separately billed", and
     // keeps OpenClaw's cost accounting from inventing charges.
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  }));
+  };
+}
+
+/**
+ * Builds the catalog entries OpenClaw shows in model pickers.
+ *
+ * @param {string[]} [modelIds]
+ */
+export function buildAntigravityModelCatalog(modelIds = ANTIGRAVITY_MODEL_IDS) {
+  const ids = [];
+  for (const raw of modelIds) {
+    const id = typeof raw === "string" ? raw.trim() : "";
+    if (!id || ids.includes(id)) {
+      continue;
+    }
+    ids.push(id);
+  }
+  return (ids.length > 0 ? ids : ANTIGRAVITY_MODEL_IDS).map(catalogEntryForModelId);
 }
