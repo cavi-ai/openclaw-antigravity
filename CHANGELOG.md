@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.7
+
+- Keep `antigravity-cli` selectable in `openclaw configure` and load its catalog
+  after the auth choice.
+
 ## 0.2.6
 
 - Refresh the Antigravity model catalog from live `agy models`. Reconnect

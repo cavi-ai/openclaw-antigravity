@@ -169,7 +169,7 @@ test("backend serializes runs so concurrent turns cannot interleave one conversa
 test("backend owns direct antigravity-cli/<model> refs rather than aliasing a provider", () => {
   const backend = buildAntigravityCliBackend();
   assert.equal(backend.id, "antigravity-cli");
-  assert.equal(backend.modelProvider, backend.id);
+  assert.equal(backend.modelProvider, undefined);
 });
 
 test("backend exposes short model aliases agy itself does not accept", () => {
@@ -649,4 +649,11 @@ test("cli provider does not register usage hooks", () => {
   const provider = buildAntigravityProvider();
   assert.equal(provider.resolveUsageAuth, undefined);
   assert.equal(provider.fetchUsageSnapshot, undefined);
+});
+
+test("configure loads the Antigravity catalog after the auth choice", () => {
+  const provider = buildAntigravityProvider();
+  assert.equal(provider.wizard.setup.methodId, "cli");
+  assert.equal(provider.wizard.setup.modelSelection.promptWhenAuthChoiceProvided, true);
+  assert.equal(provider.wizard.setup.choiceId, undefined);
 });

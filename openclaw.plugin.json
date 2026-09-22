@@ -1,7 +1,7 @@
 {
   "id": "antigravity",
   "name": "Antigravity CLI",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Runs Google's Antigravity CLI (agy) as a subscription-backed model provider.",
   "enabledByDefault": false,
   "activation": {

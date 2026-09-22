@@ -317,6 +317,14 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
         },
       }),
     },
+    wizard: {
+      setup: {
+        methodId: "cli",
+        modelSelection: {
+          promptWhenAuthChoiceProvided: true,
+        },
+      },
+    },
     resolveThinkingProfile: () => ANTIGRAVITY_THINKING_PROFILE,
     // agy accepts model ids this catalog has not caught up with. Rather than
     // fail the run, pass an unknown id straight through to `--model`.

@@ -173,10 +173,9 @@ export function buildAntigravityCliBackend(options = {}) {
       executionMode === "side-question"
         ? [...baseArgs, "--agent", TOOL_FREE_SETUP_AGENT_ID]
         : resolveAntigravityEffortArgs(baseArgs, thinkingLevel),
-    // Standalone backend: agy's catalog (Gemini + Claude + GPT-OSS behind one
-    // subscription) belongs to no existing provider, so it owns direct
-    // `antigravity-cli/<model>` refs rather than aliasing a canonical provider.
-    modelProvider: ANTIGRAVITY_BACKEND_ID,
+    // Standalone backend: omit modelProvider. Setting it, even to this backend's
+    // own id, registers a CLI runtime alias and the model picker hides the provider.
+    // Direct `antigravity-cli/<model>` refs stay selectable.
     config: {
       command,
       args: [...base],
