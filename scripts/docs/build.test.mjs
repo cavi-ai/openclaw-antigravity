@@ -69,7 +69,7 @@ test("build and verification reject inconsistent identity or changed output", as
   const { verifyDocumentation } = await import("./verify.mjs");
   await assert.rejects(
     buildDocumentation({ ...IDENTITY, version: "0.1.1", outputRoot: temporary }),
-    /release version must be 0\.2\.8/u,
+    /release version must be 0\.3\.0/u,
   );
   const output = path.join(temporary, "built");
   await buildDocumentation({ ...IDENTITY, outputRoot: output });
