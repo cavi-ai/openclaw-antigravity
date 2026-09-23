@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.0
+
+- Serve the model catalog from live `agy models`, one OpenClaw id per model.
+  Effort suffixes are no longer part of the id (`gemini-3.1-pro-high` is now
+  `gemini-3.1-pro`); suffixed refs still resolve. Reconnect records the
+  endpoint and does not write model rows into config.
+- Aliases target the new ids: `pro` → `gemini-3.1-pro`, `flash` and
+  `flash-lite` → `gemini-3.8-flash`, `opus` → `claude-opus-4-6`, `gpt-oss` →
+  `gpt-oss-120b`. Opus is sent to `agy` as `claude-opus-4-6-thinking`.
+- Pass the OpenClaw thinking level as `agy --effort`, limited to the levels
+  `agy models` lists for the model. `off` sends the lowest listed level where
+  `agy` requires the flag; an unlisted level sends the nearest one. Claude
+  omits `--effort`. The thinking profile offers only those levels per model.
+- Send `--effort` on the Reconnect setup probe and other side questions;
+  `agy` rejects Gemini runs without it.
+- Reconnect writes `models: []` for the provider so OpenClaw config validation
+  accepts the connection. Catalog rows still come from `agy models`.
+- Document the `hooks.allowConversationAccess` grant OpenClaw requires before
+  it runs the provider guidance hook.
+- Keep `antigravity-cli` selectable in `openclaw configure` and load its
+  catalog after the auth choice.
+- Resolve `agy` from `~/.local/bin` when the Gateway service PATH omits it.
+- Label Claude models with dotted versions (`Claude Sonnet 4.6`).
+
 ## 0.2.4
 
 - Make the guided-discovery **Reconnect** verification tool-free by installing

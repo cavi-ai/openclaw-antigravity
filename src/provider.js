@@ -2,23 +2,34 @@
 //
 // agy owns the user's Antigravity OAuth session. Guided discovery/reconnect
 // validates that CLI-owned session and records the provider's non-secret
-// connection (models, endpoint) in config; OpenClaw stores no key for this provider.
+// endpoint in config. Model rows stay in the plugin catalog. OpenClaw stores
+// no key for this provider.
 import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { ANTIGRAVITY_BACKEND_ID } from "./cli-backend.js";
+import {
+  ANTIGRAVITY_BACKEND_ID,
+  buildAntigravityCommandEnv,
+  resolveAntigravityCommand,
+} from "./cli-backend.js";
 import {
   ANTIGRAVITY_BASE_URL,
   ANTIGRAVITY_DEFAULT_MODEL,
   ANTIGRAVITY_MODEL_ALIASES,
   ANTIGRAVITY_MODEL_API,
+  antigravityEffortLevels,
   buildAntigravityModelCatalog,
+  defaultAntigravityEffort,
+  normalizeAntigravityModelIds,
+  openClawModelId,
+  recordAntigravityModelEfforts,
 } from "./models.js";
 
 export const ANTIGRAVITY_PROVIDER_ID = ANTIGRAVITY_BACKEND_ID;
 const execFileAsync = promisify(execFile);
 const COMMAND_TIMEOUT_MS = 15_000;
+const LIVE_MODEL_CACHE_MS = 60_000;
 const COMMAND_MAX_BUFFER_BYTES = 1_048_576;
 const MINIMUM_TOOL_FREE_AGY_VERSION = [1, 2, 1];
 const TOOL_FREE_SETUP_PLUGIN_ROOT = join(
@@ -32,11 +43,34 @@ const MISSING_AUTH_MESSAGE =
 const RECONNECT_ERROR_MESSAGE =
   "Antigravity CLI could not list models. Run `agy` in a terminal to sign in, then choose Reconnect again. OpenClaw stores no Antigravity credential.";
 
+function describeCommandFailure(error) {
+  if (!error || typeof error !== "object") {
+    return String(error ?? "unknown error");
+  }
+  if (error.code === "ENOENT") {
+    return "agy was not found. Install Google's Antigravity CLI, or set plugins.entries.antigravity.config.command to its absolute path.";
+  }
+  if (error.code === "ETIMEDOUT" || error.killed === true) {
+    return "agy timed out.";
+  }
+  const output = [error.stderr, error.stdout, error.message]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  const first = output.split(/\r?\n/).find((line) => line.trim());
+  return first ? first.trim().slice(0, 300) : "agy failed.";
+}
+
+function reconnectFailure(error) {
+  return new Error(`${RECONNECT_ERROR_MESSAGE} (${describeCommandFailure(error)})`);
+}
+
 async function runCommand(command, args, context = {}) {
-  const result = await execFileAsync(command, args, {
-    env: context.env,
+  const env = buildAntigravityCommandEnv(context.env);
+  const result = await execFileAsync(resolveAntigravityCommand(command, env), args, {
+    env,
     signal: context.signal,
-    timeout: COMMAND_TIMEOUT_MS,
+    timeout: context.timeoutMs ?? COMMAND_TIMEOUT_MS,
     maxBuffer: COMMAND_MAX_BUFFER_BYTES,
   });
   return [result.stdout, result.stderr].filter(Boolean).join("\n");
@@ -84,6 +118,25 @@ function chooseDetectedModel(modelIds) {
     : modelIds[0];
 }
 
+export const ANTIGRAVITY_THINKING_PROFILE = {
+  levels: [{ id: "off" }, { id: "low" }, { id: "medium" }, { id: "high" }],
+};
+
+/**
+ * Thinking levels OpenClaw offers for a model: the `agy --effort` levels it
+ * lists, with no `off`. Claude and unknown models keep the generic profile.
+ */
+export function antigravityThinkingProfile(modelId) {
+  const levels = antigravityEffortLevels(modelId);
+  if (!levels?.length) {
+    return ANTIGRAVITY_THINKING_PROFILE;
+  }
+  return {
+    levels: levels.map((id) => ({ id })),
+    defaultLevel: defaultAntigravityEffort(levels),
+  };
+}
+
 /**
  * @param {{command?: string}} [options]
  * @param {{runCommand?: typeof runCommand}} [dependencies]
@@ -91,12 +144,21 @@ function chooseDetectedModel(modelIds) {
 export function buildAntigravityProvider(options = {}, dependencies = {}) {
   const command = options.command?.trim() || "agy";
   const execute = dependencies.runCommand ?? runCommand;
+  let liveModelCache = { at: 0, ids: [] };
 
-  const listModels = async (context) => {
+  const listModels = async (context = {}) => {
     throwIfAborted(context.signal);
+    const now = Date.now();
+    if (!context.refresh && liveModelCache.ids.length > 0 && now - liveModelCache.at < LIVE_MODEL_CACHE_MS) {
+      return liveModelCache.ids;
+    }
     const output = await execute(command, ["models"], context);
     throwIfAborted(context.signal);
-    return parseAntigravityModelIds(output);
+    const agyIds = parseAntigravityModelIds(output);
+    recordAntigravityModelEfforts(agyIds);
+    const ids = normalizeAntigravityModelIds(agyIds);
+    liveModelCache = { at: now, ids };
+    return ids;
   };
 
   const installToolFreeSetupAgent = async (context) => {
@@ -126,23 +188,28 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     }
   };
 
-  // On a successful reconnect, hand OpenClaw a non-secret config patch so the
-  // provider's endpoint and model catalog persist. Shape matches the provider
-  // connection contract other CLI backends use (`configPatch.models.providers`).
+  // On a successful reconnect, persist the non-secret endpoint. Model rows are
+  // owned by the plugin catalog (`catalog.run` / `agy models`) and are not
+  // written into config. A non-array `models` value, such as `$include`, is
+  // left in place. An array is replaced with `[]` so a previous dump is not
+  // rewritten: config validation requires `models` on non-bundled providers,
+  // and merge mode appends the catalog rows after it.
   const buildConnectionPatch = (config = {}) => {
     const existing = config.models?.providers?.[ANTIGRAVITY_PROVIDER_ID] ?? {};
+    const { models: existingModels, ...rest } = existing;
+    const keepModels =
+      existingModels && typeof existingModels === "object" && !Array.isArray(existingModels)
+        ? existingModels
+        : undefined;
     return {
       models: {
         mode: config.models?.mode ?? "merge",
         providers: {
           [ANTIGRAVITY_PROVIDER_ID]: {
-            ...existing,
+            ...rest,
             baseUrl: ANTIGRAVITY_BASE_URL,
             api: ANTIGRAVITY_MODEL_API,
-            models:
-              Array.isArray(existing.models) && existing.models.length > 0
-                ? existing.models
-                : buildAntigravityModelCatalog(),
+            models: keepModels ?? [],
           },
         },
       },
@@ -186,12 +253,14 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
             if (!context.modelRef.startsWith(prefix)) {
               return null;
             }
-            const modelId = context.modelRef.slice(prefix.length);
+            const modelId = openClawModelId(
+              context.modelRef.slice(prefix.length).replace(/-thinking$/u, ""),
+            );
             try {
               await installToolFreeSetupAgent(context);
-              const available = await listModels(context);
+              const available = await listModels({ ...context, refresh: true });
               return available.includes(modelId)
-                ? validatedResult(context.modelRef, context.config)
+                ? validatedResult(`${prefix}${modelId}`, context.config)
                 : null;
             } catch (error) {
               if (isAbortError(error, context.signal)) {
@@ -208,18 +277,57 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
             if (isAbortError(error, context.signal)) {
               throw error;
             }
-            throw new Error(RECONNECT_ERROR_MESSAGE);
+            throw reconnectFailure(error);
           }
-          const detected = await detect(context);
-          if (!detected) {
-            throw new Error(RECONNECT_ERROR_MESSAGE);
+          let modelIds;
+          try {
+            modelIds = await listModels({ ...context, refresh: true });
+          } catch (error) {
+            if (isAbortError(error, context.signal)) {
+              throw error;
+            }
+            throw reconnectFailure(error);
           }
-          return validatedResult(detected.modelRef, context.config);
+          const modelId = chooseDetectedModel(modelIds);
+          if (!modelId) {
+            throw reconnectFailure(new Error("agy listed no models."));
+          }
+          return validatedResult(`${ANTIGRAVITY_PROVIDER_ID}/${modelId}`, context.config);
         },
       },
     ],
     buildMissingAuthMessage: () => MISSING_AUTH_MESSAGE,
     buildAuthDoctorHint: () => MISSING_AUTH_MESSAGE,
+    catalog: {
+      order: "simple",
+      run: async (context = {}) => {
+        try {
+          const modelIds = await listModels(context);
+          if (modelIds.length > 0) {
+            return {
+              provider: {
+                baseUrl: ANTIGRAVITY_BASE_URL,
+                api: ANTIGRAVITY_MODEL_API,
+                defaultModel: chooseDetectedModel(modelIds),
+                models: buildAntigravityModelCatalog(modelIds),
+              },
+            };
+          }
+        } catch (error) {
+          if (isAbortError(error, context.signal)) {
+            throw error;
+          }
+        }
+        return {
+          provider: {
+            baseUrl: ANTIGRAVITY_BASE_URL,
+            api: ANTIGRAVITY_MODEL_API,
+            defaultModel: ANTIGRAVITY_DEFAULT_MODEL,
+            models: buildAntigravityModelCatalog(),
+          },
+        };
+      },
+    },
     staticCatalog: {
       order: "simple",
       run: async () => ({
@@ -235,6 +343,15 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
         },
       }),
     },
+    wizard: {
+      setup: {
+        methodId: "cli",
+        modelSelection: {
+          promptWhenAuthChoiceProvided: true,
+        },
+      },
+    },
+    resolveThinkingProfile: (ctx) => antigravityThinkingProfile(ctx?.modelId),
     // agy accepts model ids this catalog has not caught up with. Rather than
     // fail the run, pass an unknown id straight through to `--model`.
     resolveDynamicModel: (ctx) => {
@@ -242,13 +359,15 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
       if (!modelId) {
         return null;
       }
-      const resolved = ANTIGRAVITY_MODEL_ALIASES[modelId] ?? modelId;
+      const aliased = ANTIGRAVITY_MODEL_ALIASES[modelId] ?? modelId;
+      const resolved = openClawModelId(aliased.replace(/-thinking$/u, ""));
       return {
         id: resolved,
         provider: ANTIGRAVITY_PROVIDER_ID,
         name: resolved,
         api: ANTIGRAVITY_MODEL_API,
         baseUrl: ANTIGRAVITY_BASE_URL,
+        reasoning: true,
         input: ["text"],
       };
     },

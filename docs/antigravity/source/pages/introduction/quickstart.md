@@ -4,10 +4,11 @@
 2. Run `agy models` on the same host and as the same user that runs the Gateway.
 3. Confirm the plugin list shows `antigravity` and provider setup shows
    `antigravity-cli`.
-4. Send a text prompt with a model id returned by `agy models`:
+4. Send a text prompt with an OpenClaw model id. Effort suffixes from
+   `agy models` are not part of that id:
 
 ```bash
-openclaw agent --model antigravity-cli/gemini-3.1-pro-high -m "hello"
+openclaw agent --model antigravity-cli/gemini-3.1-pro -m "hello"
 ```
 
 The general form is `antigravity-cli/<model>`. If

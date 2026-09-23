@@ -18,6 +18,8 @@ test("manifest omits invalid PluginKind and owns antigravity-cli", () => {
   assert.deepEqual(manifest.providers, ["antigravity-cli"]);
   assert.deepEqual(manifest.cliBackends, ["antigravity-cli"]);
   assert.deepEqual(manifest.syntheticAuthRefs, ["antigravity-cli"]);
+  assert.equal(manifest.contracts, undefined);
+  assert.equal(manifest.modelCatalog.discovery["antigravity-cli"], "refreshable");
   assert.deepEqual(manifest.autoEnableWhenConfiguredProviders, ["antigravity-cli"]);
   assert.deepEqual(manifest.setup.cliBackends, ["antigravity-cli"]);
   assert.equal(manifest.setup.providers[0].id, "antigravity-cli");
@@ -76,7 +78,7 @@ test("setup-api tolerates missing pluginConfig", () => {
       command = b.config.command;
     },
   });
-  assert.equal(command, "agy");
+  assert.match(command, /(^|[\\/])agy(\.exe)?$/u);
 });
 
 test("doctor contract owns antigravity-cli session routes", () => {

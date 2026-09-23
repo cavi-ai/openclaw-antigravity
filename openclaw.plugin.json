@@ -1,7 +1,7 @@
 {
   "id": "antigravity",
   "name": "Antigravity CLI",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Runs Google's Antigravity CLI (agy) as a subscription-backed model provider.",
   "enabledByDefault": false,
   "activation": {
@@ -12,6 +12,11 @@
   "cliBackends": ["antigravity-cli"],
   "autoEnableWhenConfiguredProviders": ["antigravity-cli"],
   "syntheticAuthRefs": ["antigravity-cli"],
+  "modelCatalog": {
+    "discovery": {
+      "antigravity-cli": "refreshable"
+    }
+  },
   "setup": {
     "providers": [
       {
