@@ -46,9 +46,12 @@ or refreshes the bundled `openclaw-antigravity-tool-free` custom agent, which
 OpenClaw uses only for its connection probe. Normal provider turns keep the
 configured `agy` mode and tool behavior.
 
-Thinking level is a separate param and is passed as `agy --effort`
-(`low`, `medium`, `high`) for Gemini and GPT-OSS. `off` omits the flag.
-Claude models reject `--effort`, so the flag is omitted for them.
+Thinking level is a separate param and is passed as `agy --effort`, limited
+to the levels `agy models` lists for that model: `low`/`medium`/`high` for
+Gemini Flash, `low`/`high` for Gemini 3.1 Pro, `medium` for GPT-OSS. `agy`
+requires the flag on those models, so `off` sends the lowest listed level and
+an unlisted level sends the nearest one. Claude models reject `--effort`, so
+the flag is omitted for them.
 
 ## Use
 

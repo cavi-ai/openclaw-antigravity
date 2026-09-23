@@ -19,5 +19,6 @@ Use models as `antigravity-cli/<model>`. `agy models` is the source of truth
 for which models the signed-in account can run. Effort suffixes on those rows
 are not part of the OpenClaw model id. Discovery refreshes the catalog from
 `agy models`. Reconnect does not write model rows into config. Thinking level
-is passed as `agy --effort` for Gemini and GPT-OSS. Claude omits that flag.
+is passed as `agy --effort`, limited to the levels `agy models` lists for the
+model. Claude omits that flag.
 Opus is sent to `agy` as `claude-opus-4-6-thinking`.

@@ -1,11 +1,30 @@
 // Model catalog for Google's Antigravity CLI (`agy`).
 //
 // The static list is one OpenClaw id per model. `agy models` prints effort
-// suffixes; those collapse here. Thinking level is `agy --effort`, except
-// Claude, which rejects that flag. Opus is sent to agy as
-// `claude-opus-4-6-thinking`. Catalog rows are not written into OpenClaw config.
+// suffixes; those collapse here. Thinking level is `agy --effort`, limited to
+// the levels agy lists for that model. Claude rejects the flag. Opus is sent to
+// agy as `claude-opus-4-6-thinking`. Catalog rows are not written into OpenClaw
+// config.
 
 const EFFORT_SUFFIX = /-(?:high|medium|low)$/u;
+const EFFORT_RANK = { minimal: 1, low: 1, medium: 2, high: 3, xhigh: 3, max: 3 };
+
+/**
+ * `--effort` levels each model accepts, from `agy models` on agy 1.2.8. agy
+ * rejects a model with effort rows when the flag is missing or not listed, and
+ * rejects the flag on models without effort rows. Live `agy models` overrides.
+ */
+const ANTIGRAVITY_MODEL_EFFORTS = {
+  "gemini-3.8-flash": ["low", "medium", "high"],
+  "gemini-3.7-flash": ["low", "medium", "high"],
+  "gemini-3.6-flash": ["low", "medium", "high"],
+  "gemini-3.1-pro": ["low", "high"],
+  "claude-sonnet-4-6": [],
+  "claude-opus-4-6": [],
+  "gpt-oss-120b": ["medium"],
+};
+
+let liveModelEfforts = null;
 
 /**
  * agy ids that are not the OpenClaw id. Claude Opus is only recognized as
@@ -86,6 +105,84 @@ export function antigravityModelSupportsEffort(modelId) {
   return !openClawModelId(modelId).startsWith("claude-");
 }
 
+/** Maps raw `agy models` ids to the effort levels each OpenClaw id accepts. */
+export function effortLevelsFromAgyIds(agyIds) {
+  const efforts = {};
+  for (const raw of agyIds ?? []) {
+    const agyId = typeof raw === "string" ? raw.trim().replace(/-thinking$/u, "") : "";
+    const id = openClawModelId(agyId);
+    if (!id) {
+      continue;
+    }
+    const levels = efforts[id] ?? [];
+    const level = agyId.slice(id.length + 1);
+    if (level && !levels.includes(level)) {
+      levels.push(level);
+    }
+    efforts[id] = levels.sort((a, b) => EFFORT_RANK[a] - EFFORT_RANK[b]);
+  }
+  return efforts;
+}
+
+/** Records the effort levels from the latest `agy models` listing. */
+export function recordAntigravityModelEfforts(agyIds) {
+  const efforts = effortLevelsFromAgyIds(agyIds);
+  liveModelEfforts = Object.keys(efforts).length > 0 ? efforts : null;
+}
+
+/**
+ * `--effort` levels agy accepts for a model: live listing, then the snapshot.
+ * `[]` means the flag is rejected; `undefined` means the model is unknown.
+ */
+export function antigravityEffortLevels(modelId) {
+  const id = openClawModelId(String(modelId ?? "").replace(/-thinking$/u, ""));
+  return liveModelEfforts?.[id] ?? ANTIGRAVITY_MODEL_EFFORTS[id];
+}
+
+/** Effort used when OpenClaw sends no level: medium, else the highest listed. */
+export function defaultAntigravityEffort(levels) {
+  return levels.includes("medium") ? "medium" : levels.at(-1);
+}
+
+/**
+ * Maps an OpenClaw thinking level to an `agy --effort` value the model accepts,
+ * or `undefined` to omit the flag. `off` takes the lowest listed level because
+ * agy has no off for models with effort rows. Other levels take the nearest
+ * listed level; ties go up.
+ *
+ * @param {string | undefined} modelId
+ * @param {string | null | undefined} thinkingLevel
+ */
+export function resolveAntigravityEffort(modelId, thinkingLevel) {
+  const level = typeof thinkingLevel === "string" ? thinkingLevel.trim().toLowerCase() : "";
+  const levels = antigravityEffortLevels(modelId);
+  if (!levels) {
+    return antigravityModelSupportsEffort(modelId) && ["low", "medium", "high"].includes(level)
+      ? level
+      : undefined;
+  }
+  if (levels.length === 0) {
+    return undefined;
+  }
+  if (levels.includes(level)) {
+    return level;
+  }
+  if (level === "off") {
+    return levels[0];
+  }
+  const rank = EFFORT_RANK[level];
+  if (rank === undefined) {
+    return defaultAntigravityEffort(levels);
+  }
+  let nearest = levels[0];
+  for (const candidate of levels) {
+    if (Math.abs(EFFORT_RANK[candidate] - rank) <= Math.abs(EFFORT_RANK[nearest] - rank)) {
+      nearest = candidate;
+    }
+  }
+  return nearest;
+}
+
 // Context windows are conservative floors, not published figures — Antigravity
 // documents no per-model limits for the CLI. They exist so OpenClaw budgets and
 // compacts sanely; raise them if agy is observed accepting more.
@@ -108,16 +205,23 @@ function contextWindowFor(modelId) {
 /** Turns an OpenClaw model id into a human label, e.g. `gemini-3.1-pro` → `Gemini 3.1 Pro`. */
 export function labelForModelId(modelId) {
   const base = openClawModelId(String(modelId ?? "").replace(/-thinking$/u, ""));
-  return base
-    .split("-")
-    .filter(Boolean)
-    .map((part) => {
-      if (part === "gpt") return "GPT";
-      if (part === "oss") return "OSS";
-      if (/^\d/.test(part)) return part;
-      return part.charAt(0).toUpperCase() + part.slice(1);
-    })
-    .join(" ");
+  const words = [];
+  for (const part of base.split("-").filter(Boolean)) {
+    const previous = words.at(-1);
+    // `claude-sonnet-4-6` is version 4.6, not two words.
+    if (/^\d+$/u.test(part) && /^\d+(?:\.\d+)*$/u.test(previous ?? "")) {
+      words[words.length - 1] = `${previous}.${part}`;
+    } else if (part === "gpt") {
+      words.push("GPT");
+    } else if (part === "oss") {
+      words.push("OSS");
+    } else if (/^\d/.test(part)) {
+      words.push(part);
+    } else {
+      words.push(part.charAt(0).toUpperCase() + part.slice(1));
+    }
+  }
+  return words.join(" ");
 }
 
 /** Builds one picker row for an agy model id. */

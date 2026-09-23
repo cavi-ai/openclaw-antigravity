@@ -17,7 +17,7 @@ import { homedir } from "node:os";
 import { delimiter, isAbsolute, join } from "node:path";
 import {
   ANTIGRAVITY_MODEL_ALIASES,
-  antigravityModelSupportsEffort,
+  resolveAntigravityEffort,
   resolveAntigravityTransportModelId,
 } from "./models.js";
 
@@ -125,8 +125,8 @@ function stripEffortArgs(args) {
 }
 
 /**
- * Maps OpenClaw's thinking param onto `agy --effort`.
- * `off` and unset omit the flag. Levels outside low|medium|high are omitted.
+ * Replaces any `--effort` in args with the given level.
+ * Unset and values outside low|medium|high omit the flag.
  *
  * @param {readonly string[]} baseArgs
  * @param {string | null | undefined} thinkingLevel
@@ -174,14 +174,15 @@ export function buildAntigravityCliBackend(options = {}) {
     },
     sideQuestionToolMode: "disabled",
     resolveExecutionArgs: ({ baseArgs, executionMode, thinkingLevel, modelId }) => {
-      if (executionMode === "side-question") {
-        return [...baseArgs, "--agent", TOOL_FREE_SETUP_AGENT_ID];
-      }
-      // Claude rejects `agy --effort`. Gemini and GPT-OSS accept low|medium|high.
-      if (!antigravityModelSupportsEffort(modelId)) {
-        return resolveAntigravityEffortArgs(baseArgs, "off");
-      }
-      return resolveAntigravityEffortArgs(baseArgs, thinkingLevel);
+      // agy requires `--effort` on models with effort rows, including the
+      // setup probe, and rejects it on Claude.
+      const args = resolveAntigravityEffortArgs(
+        baseArgs,
+        resolveAntigravityEffort(modelId, thinkingLevel),
+      );
+      return executionMode === "side-question"
+        ? [...args, "--agent", TOOL_FREE_SETUP_AGENT_ID]
+        : args;
     },
     resolveModelId: ({ modelId }) => resolveAntigravityTransportModelId(modelId),
     // Standalone backend: omit modelProvider. Setting it, even to this backend's

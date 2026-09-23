@@ -18,9 +18,12 @@ import {
   ANTIGRAVITY_DEFAULT_MODEL,
   ANTIGRAVITY_MODEL_ALIASES,
   ANTIGRAVITY_MODEL_API,
+  antigravityEffortLevels,
   buildAntigravityModelCatalog,
+  defaultAntigravityEffort,
   normalizeAntigravityModelIds,
   openClawModelId,
+  recordAntigravityModelEfforts,
 } from "./models.js";
 
 export const ANTIGRAVITY_PROVIDER_ID = ANTIGRAVITY_BACKEND_ID;
@@ -115,14 +118,29 @@ function chooseDetectedModel(modelIds) {
     : modelIds[0];
 }
 
-/**
- * @param {{command?: string}} [options]
- * @param {{runCommand?: typeof runCommand}} [dependencies]
- */
 export const ANTIGRAVITY_THINKING_PROFILE = {
   levels: [{ id: "off" }, { id: "low" }, { id: "medium" }, { id: "high" }],
 };
 
+/**
+ * Thinking levels OpenClaw offers for a model: the `agy --effort` levels it
+ * lists, with no `off`. Claude and unknown models keep the generic profile.
+ */
+export function antigravityThinkingProfile(modelId) {
+  const levels = antigravityEffortLevels(modelId);
+  if (!levels?.length) {
+    return ANTIGRAVITY_THINKING_PROFILE;
+  }
+  return {
+    levels: levels.map((id) => ({ id })),
+    defaultLevel: defaultAntigravityEffort(levels),
+  };
+}
+
+/**
+ * @param {{command?: string}} [options]
+ * @param {{runCommand?: typeof runCommand}} [dependencies]
+ */
 export function buildAntigravityProvider(options = {}, dependencies = {}) {
   const command = options.command?.trim() || "agy";
   const execute = dependencies.runCommand ?? runCommand;
@@ -136,7 +154,9 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     }
     const output = await execute(command, ["models"], context);
     throwIfAborted(context.signal);
-    const ids = normalizeAntigravityModelIds(parseAntigravityModelIds(output));
+    const agyIds = parseAntigravityModelIds(output);
+    recordAntigravityModelEfforts(agyIds);
+    const ids = normalizeAntigravityModelIds(agyIds);
     liveModelCache = { at: now, ids };
     return ids;
   };
@@ -329,7 +349,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
         },
       },
     },
-    resolveThinkingProfile: () => ANTIGRAVITY_THINKING_PROFILE,
+    resolveThinkingProfile: (ctx) => antigravityThinkingProfile(ctx?.modelId),
     // agy accepts model ids this catalog has not caught up with. Rather than
     // fail the run, pass an unknown id straight through to `--model`.
     resolveDynamicModel: (ctx) => {

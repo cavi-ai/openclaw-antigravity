@@ -13,9 +13,12 @@ static catalog is passed through to `agy --model` instead of being rejected by
 the plugin. Claude Opus is the exception: `agy` only accepts
 `claude-opus-4-6-thinking`.
 
-Thinking is the OpenClaw thinking param, not part of the model id. For Gemini
-and GPT-OSS, `low`, `medium`, and `high` are passed as `agy --effort`. `off`
-omits the flag. Claude models reject `--effort`, so the flag is omitted.
+Thinking is the OpenClaw thinking param, not part of the model id. It is
+passed as `agy --effort`, limited to the levels `agy models` lists for the
+model: `low`, `medium`, `high` for Gemini Flash; `low`, `high` for Gemini 3.1
+Pro; `medium` for GPT-OSS. `agy` requires the flag on those models, so `off`
+sends the lowest listed level and an unlisted level sends the nearest one.
+Claude models reject `--effort`, so the flag is omitted.
 
 Catalog context-window values are conservative budgeting floors because the
 CLI does not publish per-model limits through this plugin boundary. Reported

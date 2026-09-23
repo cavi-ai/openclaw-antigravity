@@ -11,10 +11,14 @@ import {
   ANTIGRAVITY_MODEL_API,
   ANTIGRAVITY_MODEL_IDS,
   buildAntigravityModelCatalog,
+  effortLevelsFromAgyIds,
   labelForModelId,
+  recordAntigravityModelEfforts,
+  resolveAntigravityEffort,
 } from "../src/models.js";
 import {
   ANTIGRAVITY_THINKING_PROFILE,
+  antigravityThinkingProfile,
   buildAntigravityProvider,
   parseAntigravityModelIds,
 } from "../src/provider.js";
@@ -155,6 +159,7 @@ test("resolveModelId strips effort and sends opus as the agy id", () => {
 });
 
 test("claude models omit --effort", () => {
+  recordAntigravityModelEfforts([]);
   const backend = buildAntigravityCliBackend();
   const baseArgs = ["--print", "{prompt}", "--output-format", "json"];
   assert.deepEqual(
@@ -180,22 +185,91 @@ test("claude models omit --effort", () => {
       baseArgs,
       executionMode: "agent",
       thinkingLevel: "medium",
-      modelId: "gemini-3.1-pro",
+      modelId: "gemini-3.8-flash",
     }),
     [...baseArgs, "--effort", "medium"],
   );
 });
 
-test("side-question does not add --effort", () => {
+// agy 1.2.8: Gemini requires a listed --effort, gpt-oss-120b lists only medium,
+// Claude rejects the flag.
+test("thinking level maps to an --effort the model lists", () => {
+  recordAntigravityModelEfforts([]);
+  const cases = [
+    ["gemini-3.1-pro", "medium", "high"],
+    ["gemini-3.1-pro", undefined, "high"],
+    ["gemini-3.1-pro", "low", "low"],
+    ["gemini-3.1-pro", "minimal", "low"],
+    ["gemini-3.1-pro-high", "adaptive", "high"],
+    ["gemini-3.8-flash", "off", "low"],
+    ["gemini-3.8-flash", undefined, "medium"],
+    ["gemini-3.8-flash", "xhigh", "high"],
+    ["gpt-oss-120b", "low", "medium"],
+    ["gpt-oss-120b", "high", "medium"],
+    ["gpt-oss-120b", "off", "medium"],
+    ["claude-sonnet-4-6", "high", undefined],
+    ["claude-opus-4-6-thinking", "low", undefined],
+    ["gemini-4-pro", "low", "low"],
+    ["gemini-4-pro", "off", undefined],
+    ["claude-opus-5", "high", undefined],
+  ];
+  for (const [modelId, level, expected] of cases) {
+    assert.equal(resolveAntigravityEffort(modelId, level), expected, `${modelId} × ${level}`);
+  }
+});
+
+test("side-question keeps the model's --effort and uses the tool-free agent", () => {
+  recordAntigravityModelEfforts([]);
   const backend = buildAntigravityCliBackend();
   assert.deepEqual(
     backend.resolveExecutionArgs({
       baseArgs: ["--print", "{prompt}"],
       executionMode: "side-question",
+      modelId: "gemini-3.1-pro",
+    }),
+    ["--print", "{prompt}", "--effort", "high", "--agent", "openclaw-antigravity-setup"],
+  );
+  assert.deepEqual(
+    backend.resolveExecutionArgs({
+      baseArgs: ["--print", "{prompt}"],
+      executionMode: "side-question",
       thinkingLevel: "high",
+      modelId: "claude-sonnet-4-6",
     }),
     ["--print", "{prompt}", "--agent", "openclaw-antigravity-setup"],
   );
+});
+
+test("live agy models listing overrides the effort snapshot", async () => {
+  assert.deepEqual(
+    effortLevelsFromAgyIds([
+      "gemini-3.1-pro-high",
+      "gemini-3.1-pro-low",
+      "claude-opus-4-6-thinking",
+      "gpt-oss-120b-medium",
+    ]),
+    {
+      "gemini-3.1-pro": ["low", "high"],
+      "claude-opus-4-6": [],
+      "gpt-oss-120b": ["medium"],
+    },
+  );
+  const provider = buildAntigravityProvider(
+    {},
+    {
+      runCommand: async () =>
+        "gemini-3.1-pro-high\tGemini 3.1 Pro (High)\ngemini-3.1-pro-medium\tGemini 3.1 Pro (Medium)\n",
+    },
+  );
+  await provider.catalog.run({ config: {}, env: {} });
+  try {
+    assert.equal(resolveAntigravityEffort("gemini-3.1-pro", "medium"), "medium");
+    assert.equal(resolveAntigravityEffort("gemini-3.1-pro", "low"), "medium");
+    assert.equal(resolveAntigravityEffort("gpt-oss-120b", "high"), "medium");
+  } finally {
+    recordAntigravityModelEfforts([]);
+  }
+  assert.equal(resolveAntigravityEffort("gemini-3.1-pro", "medium"), "high");
 });
 
 test("backend resumes agy by conversation id", () => {
@@ -503,12 +577,25 @@ test("provider catalog covers every listed agy model", async () => {
   }
 });
 
-test("thinking profile is off, low, medium, and high", () => {
-  assert.deepEqual(
-    buildAntigravityProvider().resolveThinkingProfile().levels.map((level) => level.id),
-    ["off", "low", "medium", "high"],
-  );
-  assert.equal(ANTIGRAVITY_THINKING_PROFILE.levels.length, 4);
+test("thinking profile offers only the effort levels agy lists for the model", () => {
+  recordAntigravityModelEfforts([]);
+  const profile = (modelId) =>
+    buildAntigravityProvider().resolveThinkingProfile({ provider: "antigravity-cli", modelId });
+  assert.deepEqual(profile("gemini-3.1-pro"), {
+    levels: [{ id: "low" }, { id: "high" }],
+    defaultLevel: "high",
+  });
+  assert.deepEqual(profile("gemini-3.8-flash"), {
+    levels: [{ id: "low" }, { id: "medium" }, { id: "high" }],
+    defaultLevel: "medium",
+  });
+  assert.deepEqual(profile("gpt-oss-120b"), {
+    levels: [{ id: "medium" }],
+    defaultLevel: "medium",
+  });
+  assert.equal(profile("claude-sonnet-4-6"), ANTIGRAVITY_THINKING_PROFILE);
+  assert.equal(antigravityThinkingProfile("gemini-4-pro"), ANTIGRAVITY_THINKING_PROFILE);
+  assert.equal(buildAntigravityProvider().resolveThinkingProfile(), ANTIGRAVITY_THINKING_PROFILE);
 });
 
 test("reconnect keeps a models include and drops a model array", async () => {
@@ -586,7 +673,8 @@ test("resolveDynamicModel expands aliases and ignores empty ids", () => {
 test("labelForModelId does not append an effort tier", () => {
   assert.equal(labelForModelId("gemini-3.1-pro"), "Gemini 3.1 Pro");
   assert.equal(labelForModelId("gemini-3.1-pro-high"), "Gemini 3.1 Pro");
-  assert.equal(labelForModelId("claude-sonnet-4-6"), "Claude Sonnet 4 6");
+  assert.equal(labelForModelId("claude-sonnet-4-6"), "Claude Sonnet 4.6");
+  assert.equal(labelForModelId("claude-opus-4-6-thinking"), "Claude Opus 4.6");
   assert.equal(labelForModelId("gpt-oss-120b-medium"), "GPT OSS 120b");
 });
 
