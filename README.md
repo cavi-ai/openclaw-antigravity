@@ -90,6 +90,19 @@ When a request runs through this provider, Antigravity is told to:
 
 This guidance is limited to Antigravity requests and does not change either tool's global configuration.
 
+OpenClaw blocks this prompt hook for non-bundled plugins until the operator
+allows it. Requests still run without it; the guidance is not added.
+
+```json5
+{
+  plugins: {
+    entries: {
+      antigravity: { hooks: { allowConversationAccess: true } },
+    },
+  },
+}
+```
+
 ## Configuration
 
 All settings are optional and live under `plugins.entries.antigravity.config`.
