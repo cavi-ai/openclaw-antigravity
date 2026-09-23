@@ -377,6 +377,7 @@ test("guided reconnect prepares only a model currently reported by agy", async (
             "antigravity-cli": {
               baseUrl: ANTIGRAVITY_BASE_URL,
               api: ANTIGRAVITY_MODEL_API,
+              models: [],
             },
           },
         },
@@ -506,6 +507,7 @@ test("interactive reconnect returns the CLI-owned model without storing auth", a
           "antigravity-cli": {
             baseUrl: ANTIGRAVITY_BASE_URL,
             api: ANTIGRAVITY_MODEL_API,
+            models: [],
           },
         },
       },
@@ -548,6 +550,7 @@ test("reconnect preserves explicit provider settings and does not write model ro
           api: ANTIGRAVITY_MODEL_API,
           timeoutSeconds: 90,
           params: { owner: "user" },
+          models: [],
         },
       },
     },

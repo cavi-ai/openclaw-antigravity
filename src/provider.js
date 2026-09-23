@@ -191,7 +191,9 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
   // On a successful reconnect, persist the non-secret endpoint. Model rows are
   // owned by the plugin catalog (`catalog.run` / `agy models`) and are not
   // written into config. A non-array `models` value, such as `$include`, is
-  // left in place. An array is dropped so a previous dump is not rewritten.
+  // left in place. An array is replaced with `[]` so a previous dump is not
+  // rewritten: config validation requires `models` on non-bundled providers,
+  // and merge mode appends the catalog rows after it.
   const buildConnectionPatch = (config = {}) => {
     const existing = config.models?.providers?.[ANTIGRAVITY_PROVIDER_ID] ?? {};
     const { models: existingModels, ...rest } = existing;
@@ -207,7 +209,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
             ...rest,
             baseUrl: ANTIGRAVITY_BASE_URL,
             api: ANTIGRAVITY_MODEL_API,
-            ...(keepModels ? { models: keepModels } : {}),
+            models: keepModels ?? [],
           },
         },
       },

@@ -15,6 +15,10 @@
   omits `--effort`. The thinking profile offers only those levels per model.
 - Send `--effort` on the Reconnect setup probe and other side questions;
   `agy` rejects Gemini runs without it.
+- Reconnect writes `models: []` for the provider so OpenClaw config validation
+  accepts the connection. Catalog rows still come from `agy models`.
+- Document the `hooks.allowConversationAccess` grant OpenClaw requires before
+  it runs the provider guidance hook.
 - Keep `antigravity-cli` selectable in `openclaw configure` and load its
   catalog after the auth choice.
 - Resolve `agy` from `~/.local/bin` when the Gateway service PATH omits it.
