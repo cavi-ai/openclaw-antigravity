@@ -6,8 +6,8 @@ import path from "node:path";
 import test from "node:test";
 
 const IDENTITY = {
-  version: "0.2.8",
-  tag: "v0.2.8",
+  version: "0.3.0",
+  tag: "v0.3.0",
   commit: "0123456789abcdef0123456789abcdef01234567",
   sourceDateEpoch: 1700000000,
 };
@@ -49,11 +49,11 @@ test("build output is complete, stamped, and byte reproducible", async (context)
     schemaVersion: 2,
     package: "@cavi-ai/antigravity",
     product: "antigravity",
-    version: "0.2.8",
+    version: "0.3.0",
     contentSha256: await digest(first, true),
-    publicBasePath: "/docs/antigravity/v0.2.8",
+    publicBasePath: "/docs/antigravity/v0.3.0",
     stableAlias: "/docs/antigravity",
-    release: { tag: "v0.2.8", commit: IDENTITY.commit },
+    release: { tag: "v0.3.0", commit: IDENTITY.commit },
     generatedAt: "2023-11-14T22:13:20.000Z",
   });
   await verifyDocumentation({ ...IDENTITY, docsRoot: first });
