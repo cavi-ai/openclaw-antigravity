@@ -38,9 +38,11 @@ Restart the OpenClaw Gateway after installation.
 ## Connect
 
 In the Control UI, open **Models → Providers** and choose **Reconnect** on the
-Antigravity CLI card. The plugin validates the existing `agy` session. Model
-rows come from `agy models` through the plugin catalog and are not written
-into config. It does not create a credential or change the default model.
+Antigravity CLI card. The plugin validates the existing `agy` session and
+writes the `agy models` rows onto the provider. It records a non-secret
+session marker so the card can show the session. It does not copy the
+Antigravity access token, refresh token, or access-token expiry, and it does
+not change the default model.
 Reconnect installs
 or refreshes the bundled `openclaw-antigravity-tool-free` custom agent, which
 OpenClaw uses only for its connection probe. Normal provider turns keep the
@@ -60,8 +62,6 @@ Models use the `antigravity-cli/<model>` format:
 ```bash
 openclaw agent --model antigravity-cli/gemini-3.1-pro -m "hello"
 ```
-
-If your OpenClaw configuration uses `agents.defaults.modelPolicy.allow`, add the models you want to use or allow `antigravity-cli/*`.
 
 ### Models
 
@@ -123,7 +123,7 @@ openclaw config set plugins.entries.antigravity.config.command /absolute/path/to
 
 - Run `agy models` to confirm that the CLI is installed and signed in.
 - If the provider is missing, confirm the plugin is enabled and restart the Gateway.
-- If OpenClaw rejects a model before it runs, check `agents.defaults.modelPolicy.allow`.
+- If a model is missing after sign-in, reconnect so the current `agy models` list is saved with the provider.
 
 ## Limitations
 

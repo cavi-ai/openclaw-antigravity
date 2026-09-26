@@ -22,6 +22,11 @@ import {
   buildAntigravityProvider,
   parseAntigravityModelIds,
 } from "../src/provider.js";
+import {
+  ANTIGRAVITY_SESSION_MARKER,
+  ANTIGRAVITY_SESSION_PROFILE_ID,
+  buildAntigravitySessionProfile,
+} from "../src/session.js";
 import { plugin } from "../src/index.js";
 
 test("backend drives `agy` in print mode and parses its json result", () => {
@@ -349,15 +354,32 @@ test("model discovery accepts tab- and space-separated agy output from either st
   );
 });
 
+function sessionDeps(runCommand) {
+  return { runCommand };
+}
+
+const SESSION_MARKER_PROFILE = {
+  profileId: ANTIGRAVITY_SESSION_PROFILE_ID,
+  credential: {
+    type: "token",
+    provider: "antigravity-cli",
+    token: ANTIGRAVITY_SESSION_MARKER,
+  },
+};
+
+test("session profile is a marker and does not store agy tokens or expiry", () => {
+  assert.deepEqual(buildAntigravitySessionProfile(), SESSION_MARKER_PROFILE);
+  assert.equal("expires" in buildAntigravitySessionProfile().credential, false);
+});
+
 test("guided reconnect prepares only a model currently reported by agy", async () => {
   const provider = buildAntigravityProvider(
     {},
-    {
-      runCommand: async (_command, args) =>
-        args[0] === "--version"
-          ? "1.2.3\n"
-          : "gemini-3.8-flash-high\tGemini 3.8 Flash High\nclaude-sonnet-4-6\tClaude Sonnet 4.6\n",
-    },
+    sessionDeps(async (_command, args) =>
+      args[0] === "--version"
+        ? "1.2.3\n"
+        : "gemini-3.8-flash-high\tGemini 3.8 Flash High\nclaude-sonnet-4-6\tClaude Sonnet 4.6\n",
+    ),
   );
   const guided = provider.auth[0].appGuidedSetup;
 
@@ -368,7 +390,7 @@ test("guided reconnect prepares only a model currently reported by agy", async (
       modelRef: "antigravity-cli/claude-sonnet-4-6",
     }),
     {
-      profiles: [],
+      profiles: [SESSION_MARKER_PROFILE],
       defaultModel: "antigravity-cli/claude-sonnet-4-6",
       configPatch: {
         models: {
@@ -377,7 +399,18 @@ test("guided reconnect prepares only a model currently reported by agy", async (
             "antigravity-cli": {
               baseUrl: ANTIGRAVITY_BASE_URL,
               api: ANTIGRAVITY_MODEL_API,
-              models: [],
+              models: buildAntigravityModelCatalog([
+                "gemini-3.8-flash-high",
+                "claude-sonnet-4-6",
+              ]),
+            },
+          },
+        },
+        agents: {
+          defaults: {
+            models: {
+              "antigravity-cli/gemini-3.8-flash": {},
+              "antigravity-cli/claude-sonnet-4-6": {},
             },
           },
         },
@@ -488,17 +521,16 @@ test("guided reconnect propagates cancellation", async () => {
   );
 });
 
-test("interactive reconnect returns the CLI-owned model without storing auth", async () => {
+test("interactive reconnect records the session marker without agy tokens", async () => {
   const provider = buildAntigravityProvider(
     {},
-    {
-      runCommand: async (_command, args) =>
-        args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
-    },
+    sessionDeps(async (_command, args) =>
+      args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
+    ),
   );
 
   assert.deepEqual(await provider.auth[0].run({ config: {}, env: {} }), {
-    profiles: [],
+    profiles: [SESSION_MARKER_PROFILE],
     defaultModel: "antigravity-cli/gemini-3.1-pro",
     configPatch: {
       models: {
@@ -507,7 +539,14 @@ test("interactive reconnect returns the CLI-owned model without storing auth", a
           "antigravity-cli": {
             baseUrl: ANTIGRAVITY_BASE_URL,
             api: ANTIGRAVITY_MODEL_API,
-            models: [],
+            models: buildAntigravityModelCatalog(["gemini-3.1-pro-high"]),
+          },
+        },
+      },
+      agents: {
+        defaults: {
+          models: {
+            "antigravity-cli/gemini-3.1-pro": {},
           },
         },
       },
@@ -515,13 +554,12 @@ test("interactive reconnect returns the CLI-owned model without storing auth", a
   });
 });
 
-test("reconnect preserves explicit provider settings and does not write model rows", async () => {
+test("reconnect preserves explicit provider settings and writes the live model rows", async () => {
   const provider = buildAntigravityProvider(
     {},
-    {
-      runCommand: async (_command, args) =>
-        args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
-    },
+    sessionDeps(async (_command, args) =>
+      args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
+    ),
   );
   const config = {
     models: {
@@ -550,11 +588,46 @@ test("reconnect preserves explicit provider settings and does not write model ro
           api: ANTIGRAVITY_MODEL_API,
           timeoutSeconds: 90,
           params: { owner: "user" },
-          models: [],
+          models: buildAntigravityModelCatalog(["gemini-3.1-pro-high"]),
+        },
+      },
+    },
+    agents: {
+      defaults: {
+        models: {
+          "antigravity-cli/gemini-3.1-pro": {},
         },
       },
     },
   });
+});
+
+test("reconnect merges discovered models into existing defaults.models entries", async () => {
+  const provider = buildAntigravityProvider(
+    {},
+    sessionDeps(async (_command, args) =>
+      args[0] === "--version" ? "1.2.3\n" : "gemini-3.8-flash-high\tGemini 3.8 Flash High\n",
+    ),
+  );
+  const result = await provider.auth[0].run({
+    config: {
+      agents: {
+        defaults: {
+          models: {
+            "anthropic/claude-sonnet-4-6": { alias: "Sonnet" },
+            "antigravity-cli/gemini-3.8-flash": { alias: "Flash" },
+          },
+        },
+      },
+    },
+    env: {},
+  });
+
+  assert.deepEqual(result.configPatch.agents.defaults.models, {
+    "anthropic/claude-sonnet-4-6": { alias: "Sonnet" },
+    "antigravity-cli/gemini-3.8-flash": { alias: "Flash" },
+  });
+  assert.equal(result.configPatch.agents.defaults.modelPolicy, undefined);
 });
 
 test("missing-auth guidance points at agy login, not an OpenClaw API key", () => {
@@ -604,10 +677,9 @@ test("thinking profile offers only the effort levels agy lists for the model", (
 test("reconnect keeps a models include and drops a model array", async () => {
   const provider = buildAntigravityProvider(
     {},
-    {
-      runCommand: async (_command, args) =>
-        args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
-    },
+    sessionDeps(async (_command, args) =>
+      args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
+    ),
   );
   const result = await provider.auth[0].run({
     config: {
@@ -655,10 +727,28 @@ test("dynamic models carry required catalog shape fields", () => {
   assert.equal(model.id, "gemini-4-pro");
 });
 
-test("catalog reports zero per-token cost because Antigravity bills by subscription", () => {
+test("catalog cost stays zero when neither agy nor Google provides a rate", () => {
   for (const model of buildAntigravityModelCatalog()) {
     assert.deepEqual(model.cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
   }
+  const unmatched = buildAntigravityModelCatalog(["claude-sonnet-4-6"], {
+    googleModels: [{ id: "gemini-3.8-flash", cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 0 } }],
+  });
+  assert.deepEqual(unmatched[0].cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+});
+
+test("catalog cost uses the Google model with the same id when agy omits a rate", () => {
+  const googleCost = { input: 1.25, output: 10, cacheRead: 0.125, cacheWrite: 0 };
+  const [flash, pro] = buildAntigravityModelCatalog(["gemini-3.8-flash", "gemini-3.1-pro"], {
+    costs: { "gemini-3.1-pro": { input: 4, output: 16, cacheRead: 0, cacheWrite: 0 } },
+    googleModels: [
+      { id: "gemini-3.8-flash", cost: googleCost },
+      { id: "gemini-3.1-pro", cost: { input: 9, output: 9, cacheRead: 0, cacheWrite: 0 } },
+      { id: "gemini-3.1-pro-preview", cost: { input: 3, output: 12, cacheRead: 0, cacheWrite: 0 } },
+    ],
+  });
+  assert.deepEqual(flash.cost, googleCost);
+  assert.deepEqual(pro.cost, { input: 4, output: 16, cacheRead: 0, cacheWrite: 0 });
 });
 
 test("unknown model ids pass through instead of failing the run", () => {
