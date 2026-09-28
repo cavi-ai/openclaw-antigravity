@@ -166,6 +166,9 @@ export function buildAntigravityCliBackend(options = {}) {
   const command = resolveAntigravityCommand(options.command?.trim() || DEFAULT_COMMAND);
   return {
     id: ANTIGRAVITY_BACKEND_ID,
+    // Stock CLI runtime-artifact policy. A native agy binary is admitted through
+    // nativeExecutableNames. packageName is read only when the command is a
+    // script whose package.json owns the tree.
     runtimeArtifact: {
       kind: "bundled-package-tree",
       packageName: "agy",

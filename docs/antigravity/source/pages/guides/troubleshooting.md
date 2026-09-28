@@ -8,9 +8,10 @@ provider state, but doctor cannot repair discovery when the plugin never loaded.
 
 ## `hook registration missing name`
 
-`0.2.0` failed during plugin register on OpenClaw hosts that require a named
-legacy hook or typed `api.on("before_prompt_build")`. Install `0.2.1` or later
-and restart the Gateway.
+`0.2.0` aborted registration by calling `registerHook` without a name. This
+plugin registers provider guidance as the provider system-prompt contribution
+and does not register that hook. Restart the Gateway after installing the
+plugin.
 
 ## `agy` is missing
 
@@ -29,12 +30,11 @@ tools.
 Follow the authentication recovery procedure: sign in through `agy`, verify
 with `agy models`, and keep credentials out of OpenClaw configuration.
 
-## A model is rejected before `agy` runs
+## A model is missing after connect
 
-Use `antigravity-cli/<model>` and check
-`agents.defaults.modelPolicy.allow`. An allowlist must include the selected
-model or `antigravity-cli/*`. After `agy` adds or removes models, discovery
-reads the new ids; the allowlist still has to include them.
+Use `antigravity-cli/<model>`. Reconnect the provider so the current `agy models`
+list is saved. Existing `agents.defaults.models` entries stay, and the models
+from that listing are added.
 
 ## A tool call waits for approval
 

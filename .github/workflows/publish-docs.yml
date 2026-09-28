@@ -98,6 +98,7 @@ jobs:
 
       - name: Test package and release documentation
         run: |
+          npm install
           npm test
           npm pack --dry-run
           npm run docs:test

@@ -6,7 +6,7 @@ suffixes (`-high`, `-medium`, `-low`) on `agy models` rows are not part of
 that id.
 
 Discovery asks `agy models` and serves one catalog row per model. Reconnect
-does not write model rows into config. The plugin also keeps a static fallback
+writes those rows into the provider config. The plugin also keeps a static fallback
 snapshot and aliases such as `pro`, `flash`, `sonnet`, `opus`, and `gpt-oss`.
 Aliases expand before the CLI run. A non-empty model id not yet present in the
 static catalog is passed through to `agy --model` instead of being rejected by

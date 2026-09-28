@@ -12,7 +12,7 @@ import { parseAntigravityModelIds } from "../src/provider.js";
 const PROVIDER_ID = "antigravity-cli";
 const CHOICE_ID = "antigravity-cli";
 const ACTION_LABEL = "Reconnect";
-const MIN_HOST_VERSION = [2026, 7, 0];
+const MIN_HOST_VERSION = [2026, 9, 6];
 const COMMAND_TIMEOUT_MS = 30_000;
 const STARTUP_TIMEOUT_MS = 20_000;
 

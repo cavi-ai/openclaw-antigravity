@@ -3,8 +3,8 @@
 // The static list is one OpenClaw id per model. `agy models` prints effort
 // suffixes; those collapse here. Thinking level is `agy --effort`, limited to
 // the levels agy lists for that model. Claude rejects the flag. Opus is sent to
-// agy as `claude-opus-4-6-thinking`. Catalog rows are not written into OpenClaw
-// config.
+// agy as `claude-opus-4-6-thinking`. Reconnect writes these rows into the
+// provider config.
 
 const EFFORT_SUFFIX = /-(?:high|medium|low)$/u;
 const EFFORT_RANK = { minimal: 1, low: 1, medium: 2, high: 3, xhigh: 3, max: 3 };
@@ -224,8 +224,52 @@ export function labelForModelId(modelId) {
   return words.join(" ");
 }
 
+const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+
+/** A usable rate. All-zero placeholders mean the source did not provide a price. */
+function costIsProvided(cost) {
+  if (!cost || typeof cost !== "object") {
+    return false;
+  }
+  if (Array.isArray(cost.tieredPricing) && cost.tieredPricing.length > 0) {
+    return true;
+  }
+  return ["input", "output", "cacheRead", "cacheWrite"].some(
+    (key) => typeof cost[key] === "number" && Number.isFinite(cost[key]) && cost[key] > 0,
+  );
+}
+
+function cloneProvidedCost(cost) {
+  return {
+    input: cost.input ?? 0,
+    output: cost.output ?? 0,
+    cacheRead: cost.cacheRead ?? 0,
+    cacheWrite: cost.cacheWrite ?? 0,
+    ...(Array.isArray(cost.tieredPricing) ? { tieredPricing: cost.tieredPricing } : {}),
+  };
+}
+
+/**
+ * Price for one catalog row. agy wins when it reports a rate. Otherwise the
+ * Google provider's row with the same model id is used. Zero remains only when
+ * neither source has a rate for that exact id.
+ *
+ * @param {string} modelId
+ * @param {{ cost?: object, googleModels?: { id?: string, cost?: object }[] }} [options]
+ */
+export function costForAntigravityModel(modelId, options = {}) {
+  if (costIsProvided(options.cost)) {
+    return cloneProvidedCost(options.cost);
+  }
+  const google = (options.googleModels ?? []).find((model) => model?.id === modelId);
+  if (costIsProvided(google?.cost)) {
+    return cloneProvidedCost(google.cost);
+  }
+  return { ...ZERO_COST };
+}
+
 /** Builds one picker row for an agy model id. */
-export function catalogEntryForModelId(modelId) {
+export function catalogEntryForModelId(modelId, options = {}) {
   return {
     id: modelId,
     name: labelForModelId(modelId),
@@ -236,10 +280,7 @@ export function catalogEntryForModelId(modelId) {
     input: ["text"],
     contextWindow: contextWindowFor(modelId),
     maxTokens: 64_000,
-    // Antigravity is subscription-billed, not metered per token, so there is no
-    // per-token price to report. Zero here means "not separately billed", and
-    // keeps OpenClaw's cost accounting from inventing charges.
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    cost: costForAntigravityModel(modelId, options),
   };
 }
 
@@ -247,8 +288,14 @@ export function catalogEntryForModelId(modelId) {
  * Builds the catalog entries OpenClaw shows in model pickers.
  *
  * @param {string[]} [modelIds]
+ * @param {{ costs?: Record<string, object>, googleModels?: { id?: string, cost?: object }[] }} [options]
  */
-export function buildAntigravityModelCatalog(modelIds = ANTIGRAVITY_MODEL_IDS) {
+export function buildAntigravityModelCatalog(modelIds = ANTIGRAVITY_MODEL_IDS, options = {}) {
   const ids = normalizeAntigravityModelIds(modelIds);
-  return (ids.length > 0 ? ids : ANTIGRAVITY_MODEL_IDS).map(catalogEntryForModelId);
+  return (ids.length > 0 ? ids : ANTIGRAVITY_MODEL_IDS).map((modelId) =>
+    catalogEntryForModelId(modelId, {
+      cost: options.costs?.[modelId],
+      googleModels: options.googleModels,
+    }),
+  );
 }

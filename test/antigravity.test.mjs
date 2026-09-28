@@ -22,7 +22,13 @@ import {
   buildAntigravityProvider,
   parseAntigravityModelIds,
 } from "../src/provider.js";
+import {
+  ANTIGRAVITY_SESSION_MARKER,
+  ANTIGRAVITY_SESSION_PROFILE_ID,
+  buildAntigravitySessionProfile,
+} from "../src/session.js";
 import { plugin } from "../src/index.js";
+import { unifiedAntigravityCatalog } from "../src/register.js";
 
 test("backend drives `agy` in print mode and parses its json result", () => {
   const { config } = buildAntigravityCliBackend();
@@ -349,15 +355,32 @@ test("model discovery accepts tab- and space-separated agy output from either st
   );
 });
 
+function sessionDeps(runCommand) {
+  return { runCommand };
+}
+
+const SESSION_MARKER_PROFILE = {
+  profileId: ANTIGRAVITY_SESSION_PROFILE_ID,
+  credential: {
+    type: "token",
+    provider: "antigravity-cli",
+    token: ANTIGRAVITY_SESSION_MARKER,
+  },
+};
+
+test("session profile is a marker and does not store agy tokens or expiry", () => {
+  assert.deepEqual(buildAntigravitySessionProfile(), SESSION_MARKER_PROFILE);
+  assert.equal("expires" in buildAntigravitySessionProfile().credential, false);
+});
+
 test("guided reconnect prepares only a model currently reported by agy", async () => {
   const provider = buildAntigravityProvider(
     {},
-    {
-      runCommand: async (_command, args) =>
-        args[0] === "--version"
-          ? "1.2.3\n"
-          : "gemini-3.8-flash-high\tGemini 3.8 Flash High\nclaude-sonnet-4-6\tClaude Sonnet 4.6\n",
-    },
+    sessionDeps(async (_command, args) =>
+      args[0] === "--version"
+        ? "1.2.3\n"
+        : "gemini-3.8-flash-high\tGemini 3.8 Flash High\nclaude-sonnet-4-6\tClaude Sonnet 4.6\n",
+    ),
   );
   const guided = provider.auth[0].appGuidedSetup;
 
@@ -368,7 +391,7 @@ test("guided reconnect prepares only a model currently reported by agy", async (
       modelRef: "antigravity-cli/claude-sonnet-4-6",
     }),
     {
-      profiles: [],
+      profiles: [SESSION_MARKER_PROFILE],
       defaultModel: "antigravity-cli/claude-sonnet-4-6",
       configPatch: {
         models: {
@@ -377,7 +400,18 @@ test("guided reconnect prepares only a model currently reported by agy", async (
             "antigravity-cli": {
               baseUrl: ANTIGRAVITY_BASE_URL,
               api: ANTIGRAVITY_MODEL_API,
-              models: [],
+              models: buildAntigravityModelCatalog([
+                "gemini-3.8-flash-high",
+                "claude-sonnet-4-6",
+              ]),
+            },
+          },
+        },
+        agents: {
+          defaults: {
+            models: {
+              "antigravity-cli/gemini-3.8-flash": {},
+              "antigravity-cli/claude-sonnet-4-6": {},
             },
           },
         },
@@ -488,17 +522,16 @@ test("guided reconnect propagates cancellation", async () => {
   );
 });
 
-test("interactive reconnect returns the CLI-owned model without storing auth", async () => {
+test("interactive reconnect records the session marker without agy tokens", async () => {
   const provider = buildAntigravityProvider(
     {},
-    {
-      runCommand: async (_command, args) =>
-        args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
-    },
+    sessionDeps(async (_command, args) =>
+      args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
+    ),
   );
 
   assert.deepEqual(await provider.auth[0].run({ config: {}, env: {} }), {
-    profiles: [],
+    profiles: [SESSION_MARKER_PROFILE],
     defaultModel: "antigravity-cli/gemini-3.1-pro",
     configPatch: {
       models: {
@@ -507,7 +540,14 @@ test("interactive reconnect returns the CLI-owned model without storing auth", a
           "antigravity-cli": {
             baseUrl: ANTIGRAVITY_BASE_URL,
             api: ANTIGRAVITY_MODEL_API,
-            models: [],
+            models: buildAntigravityModelCatalog(["gemini-3.1-pro-high"]),
+          },
+        },
+      },
+      agents: {
+        defaults: {
+          models: {
+            "antigravity-cli/gemini-3.1-pro": {},
           },
         },
       },
@@ -515,13 +555,12 @@ test("interactive reconnect returns the CLI-owned model without storing auth", a
   });
 });
 
-test("reconnect preserves explicit provider settings and does not write model rows", async () => {
+test("reconnect preserves explicit provider settings and writes the live model rows", async () => {
   const provider = buildAntigravityProvider(
     {},
-    {
-      runCommand: async (_command, args) =>
-        args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
-    },
+    sessionDeps(async (_command, args) =>
+      args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
+    ),
   );
   const config = {
     models: {
@@ -550,11 +589,46 @@ test("reconnect preserves explicit provider settings and does not write model ro
           api: ANTIGRAVITY_MODEL_API,
           timeoutSeconds: 90,
           params: { owner: "user" },
-          models: [],
+          models: buildAntigravityModelCatalog(["gemini-3.1-pro-high"]),
+        },
+      },
+    },
+    agents: {
+      defaults: {
+        models: {
+          "antigravity-cli/gemini-3.1-pro": {},
         },
       },
     },
   });
+});
+
+test("reconnect merges discovered models into existing defaults.models entries", async () => {
+  const provider = buildAntigravityProvider(
+    {},
+    sessionDeps(async (_command, args) =>
+      args[0] === "--version" ? "1.2.3\n" : "gemini-3.8-flash-high\tGemini 3.8 Flash High\n",
+    ),
+  );
+  const result = await provider.auth[0].run({
+    config: {
+      agents: {
+        defaults: {
+          models: {
+            "anthropic/claude-sonnet-4-6": { alias: "Sonnet" },
+            "antigravity-cli/gemini-3.8-flash": { alias: "Flash" },
+          },
+        },
+      },
+    },
+    env: {},
+  });
+
+  assert.deepEqual(result.configPatch.agents.defaults.models, {
+    "anthropic/claude-sonnet-4-6": { alias: "Sonnet" },
+    "antigravity-cli/gemini-3.8-flash": { alias: "Flash" },
+  });
+  assert.equal(result.configPatch.agents.defaults.modelPolicy, undefined);
 });
 
 test("missing-auth guidance points at agy login, not an OpenClaw API key", () => {
@@ -604,10 +678,9 @@ test("thinking profile offers only the effort levels agy lists for the model", (
 test("reconnect keeps a models include and drops a model array", async () => {
   const provider = buildAntigravityProvider(
     {},
-    {
-      runCommand: async (_command, args) =>
-        args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
-    },
+    sessionDeps(async (_command, args) =>
+      args[0] === "--version" ? "1.2.3\n" : "gemini-3.1-pro-high\tGemini 3.1 Pro High\n",
+    ),
   );
   const result = await provider.auth[0].run({
     config: {
@@ -655,10 +728,28 @@ test("dynamic models carry required catalog shape fields", () => {
   assert.equal(model.id, "gemini-4-pro");
 });
 
-test("catalog reports zero per-token cost because Antigravity bills by subscription", () => {
+test("catalog cost stays zero when neither agy nor Google provides a rate", () => {
   for (const model of buildAntigravityModelCatalog()) {
     assert.deepEqual(model.cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
   }
+  const unmatched = buildAntigravityModelCatalog(["claude-sonnet-4-6"], {
+    googleModels: [{ id: "gemini-3.8-flash", cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 0 } }],
+  });
+  assert.deepEqual(unmatched[0].cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+});
+
+test("catalog cost uses the Google model with the same id when agy omits a rate", () => {
+  const googleCost = { input: 1.25, output: 10, cacheRead: 0.125, cacheWrite: 0 };
+  const [flash, pro] = buildAntigravityModelCatalog(["gemini-3.8-flash", "gemini-3.1-pro"], {
+    costs: { "gemini-3.1-pro": { input: 4, output: 16, cacheRead: 0, cacheWrite: 0 } },
+    googleModels: [
+      { id: "gemini-3.8-flash", cost: googleCost },
+      { id: "gemini-3.1-pro", cost: { input: 9, output: 9, cacheRead: 0, cacheWrite: 0 } },
+      { id: "gemini-3.1-pro-preview", cost: { input: 3, output: 12, cacheRead: 0, cacheWrite: 0 } },
+    ],
+  });
+  assert.deepEqual(flash.cost, googleCost);
+  assert.deepEqual(pro.cost, { input: 4, output: 16, cacheRead: 0, cacheWrite: 0 });
 });
 
 test("unknown model ids pass through instead of failing the run", () => {
@@ -681,39 +772,87 @@ test("labelForModelId does not append an effort tier", () => {
   assert.equal(labelForModelId("gpt-oss-120b-medium"), "GPT OSS 120b");
 });
 
-test("plugin registers both the provider and the CLI backend under one id", () => {
+test("plugin registers the provider, CLI backend, and text catalog under one id", () => {
   const calls = [];
   plugin.register({
     registerProvider: (p) => calls.push(["provider", p.id]),
     registerCliBackend: (b) => calls.push(["cli-backend", b.id]),
+    registerModelCatalogProvider: (entry) => calls.push(["catalog", entry.provider, ...entry.kinds]),
+    on() {
+      throw new Error("conversation hook");
+    },
+    registerHook() {
+      throw new Error("legacy hook");
+    },
   });
   assert.deepEqual(calls, [
     ["provider", "antigravity-cli"],
     ["cli-backend", "antigravity-cli"],
+    ["catalog", "antigravity-cli", "text"],
   ]);
 });
 
-test("plugin gives Antigravity provider-scoped OpenClaw and mcporter guidance", () => {
-  let hook;
-  let registerHookCalled = false;
+test("provider guidance is the SDK system-prompt contribution", () => {
+  let provider;
+  plugin.register({
+    registerProvider: (registered) => {
+      provider = registered;
+    },
+    registerCliBackend: () => {},
+    registerModelCatalogProvider: () => {},
+    on() {
+      throw new Error("conversation hook");
+    },
+  });
+  const guidance = provider.resolveSystemPromptContribution({
+    provider: "antigravity-cli",
+    modelId: "gemini-3.1-pro",
+  });
+  assert.match(guidance.stablePrefix, /openclaw/);
+  assert.match(guidance.stablePrefix, /mcporter/);
+  assert.equal(guidance.dynamicSuffix, undefined);
+  assert.equal(
+    provider.resolveSystemPromptContribution({ provider: "other-provider", modelId: "x" }),
+    undefined,
+  );
+});
+
+test("static model catalog provider rows come from the provider catalog", async () => {
+  let catalog;
   plugin.register({
     registerProvider: () => {},
     registerCliBackend: () => {},
-    registerHook: () => {
-      registerHookCalled = true;
-    },
-    on: (name, handler) => {
-      assert.equal(name, "before_prompt_build");
-      hook = handler;
+    registerModelCatalogProvider: (entry) => {
+      catalog = entry;
     },
   });
+  const rows = await catalog.staticCatalog();
+  assert.ok(rows.some((row) => row.model === "gemini-3.1-pro" && row.default === true && row.source === "static"));
+  assert.ok(rows.every((row) => row.kind === "text" && row.provider === "antigravity-cli"));
+});
 
-  assert.equal(registerHookCalled, false);
-  assert.equal(typeof hook, "function");
-  const guidance = hook({}, { modelProviderId: "antigravity-cli" });
-  assert.match(guidance.prependContext, /openclaw/);
-  assert.match(guidance.prependContext, /mcporter/);
-  assert.equal(hook({}, { modelProviderId: "other-provider" }), undefined);
+test("live catalog rows keep the provider default and drop blank ids", () => {
+  assert.deepEqual(
+    unifiedAntigravityCatalog(
+      {
+        provider: {
+          defaultModel: "gemini-3.1-pro",
+          models: [{ id: "gemini-3.1-pro", name: "Gemini 3.1 Pro" }, { id: "" }, { name: "missing" }],
+        },
+      },
+      "live",
+    ),
+    [
+      {
+        kind: "text",
+        provider: "antigravity-cli",
+        model: "gemini-3.1-pro",
+        label: "Gemini 3.1 Pro",
+        source: "live",
+        default: true,
+      },
+    ],
+  );
 });
 
 test("every configSchema option changes real behaviour", () => {
@@ -745,6 +884,7 @@ test("plugin passes its config through to the backend", () => {
     registerCliBackend: (b) => {
       backend = b;
     },
+    registerModelCatalogProvider: () => {},
   });
   assert.equal(backend.config.command, "/opt/agy");
 });

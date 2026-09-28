@@ -1,9 +1,9 @@
 // Provider registration for Antigravity (`agy`).
 //
 // agy owns the user's Antigravity OAuth session. Guided discovery/reconnect
-// validates that CLI-owned session and records the provider's non-secret
-// endpoint in config. Model rows stay in the plugin catalog. OpenClaw stores
-// no key for this provider.
+// validates that CLI-owned session, writes the listed models, and records a
+// non-secret session marker. OpenClaw does not store the Antigravity access
+// token, refresh token, or access-token expiry.
 import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,8 +25,24 @@ import {
   openClawModelId,
   recordAntigravityModelEfforts,
 } from "./models.js";
+import { buildAntigravitySessionProfile } from "./session.js";
 
 export const ANTIGRAVITY_PROVIDER_ID = ANTIGRAVITY_BACKEND_ID;
+
+const ANTIGRAVITY_OPENCLAW_CONTEXT = [
+  "You are running through OpenClaw's Antigravity CLI model provider.",
+  "Use the installed `openclaw` CLI for OpenClaw operations and check its help before assuming command syntax.",
+  "Use `mcporter` for external MCP servers it manages and check its help before assuming command syntax.",
+  "Do not change global OpenClaw or mcporter configuration unless the user explicitly asks.",
+].join(" ");
+
+/** Provider SDK system-prompt contribution. Scoped to this provider by the host. */
+export function antigravitySystemPromptContribution(ctx) {
+  return ctx?.provider === ANTIGRAVITY_PROVIDER_ID
+    ? { stablePrefix: ANTIGRAVITY_OPENCLAW_CONTEXT }
+    : undefined;
+}
+
 const execFileAsync = promisify(execFile);
 const COMMAND_TIMEOUT_MS = 15_000;
 const LIVE_MODEL_CACHE_MS = 60_000;
@@ -188,19 +204,32 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     }
   };
 
-  // On a successful reconnect, persist the non-secret endpoint. Model rows are
-  // owned by the plugin catalog (`catalog.run` / `agy models`) and are not
-  // written into config. A non-array `models` value, such as `$include`, is
-  // left in place. An array is replaced with `[]` so a previous dump is not
-  // rewritten: config validation requires `models` on non-bundled providers,
-  // and merge mode appends the catalog rows after it.
-  const buildConnectionPatch = (config = {}) => {
+  const googleModelsFrom = (config) => {
+    const models = config?.models?.providers?.google?.models;
+    return Array.isArray(models) ? models : [];
+  };
+
+  const catalogOptionsFor = (config) => ({ googleModels: googleModelsFrom(config) });
+
+  // On a successful reconnect, persist the non-secret endpoint and the model
+  // rows from the `agy models` listing just fetched. A non-array `models`
+  // value, such as `$include`, is left in place. The session profile is only
+  // the marker; agy owns login refresh. Discovered refs are merged into
+  // `agents.defaults.models` the same way other provider setup patches do:
+  // existing entries and aliases stay, and this provider's models are added.
+  const buildConnectionPatch = (config = {}, modelIds = []) => {
     const existing = config.models?.providers?.[ANTIGRAVITY_PROVIDER_ID] ?? {};
     const { models: existingModels, ...rest } = existing;
     const keepModels =
       existingModels && typeof existingModels === "object" && !Array.isArray(existingModels)
         ? existingModels
         : undefined;
+    const catalog = buildAntigravityModelCatalog(modelIds, catalogOptionsFor(config));
+    const modelEntries = { ...(config.agents?.defaults?.models ?? {}) };
+    for (const model of catalog) {
+      const ref = `${ANTIGRAVITY_PROVIDER_ID}/${model.id}`;
+      modelEntries[ref] = { ...(modelEntries[ref] ?? {}) };
+    }
     return {
       models: {
         mode: config.models?.mode ?? "merge",
@@ -209,18 +238,25 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
             ...rest,
             baseUrl: ANTIGRAVITY_BASE_URL,
             api: ANTIGRAVITY_MODEL_API,
-            models: keepModels ?? [],
+            models: keepModels ?? catalog,
           },
+        },
+      },
+      agents: {
+        defaults: {
+          models: modelEntries,
         },
       },
     };
   };
 
-  const validatedResult = (modelRef, config) => ({
-    profiles: [],
-    defaultModel: modelRef,
-    configPatch: buildConnectionPatch(config),
-  });
+  const validatedResult = (modelRef, config, modelIds) => {
+    return {
+      profiles: [buildAntigravitySessionProfile()],
+      defaultModel: modelRef,
+      configPatch: buildConnectionPatch(config, modelIds),
+    };
+  };
 
   return {
     id: ANTIGRAVITY_PROVIDER_ID,
@@ -260,7 +296,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
               await installToolFreeSetupAgent(context);
               const available = await listModels({ ...context, refresh: true });
               return available.includes(modelId)
-                ? validatedResult(`${prefix}${modelId}`, context.config)
+                ? validatedResult(`${prefix}${modelId}`, context.config, available)
                 : null;
             } catch (error) {
               if (isAbortError(error, context.signal)) {
@@ -292,7 +328,11 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
           if (!modelId) {
             throw reconnectFailure(new Error("agy listed no models."));
           }
-          return validatedResult(`${ANTIGRAVITY_PROVIDER_ID}/${modelId}`, context.config);
+          return validatedResult(
+            `${ANTIGRAVITY_PROVIDER_ID}/${modelId}`,
+            context.config,
+            modelIds,
+          );
         },
       },
     ],
@@ -309,7 +349,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
                 baseUrl: ANTIGRAVITY_BASE_URL,
                 api: ANTIGRAVITY_MODEL_API,
                 defaultModel: chooseDetectedModel(modelIds),
-                models: buildAntigravityModelCatalog(modelIds),
+                models: buildAntigravityModelCatalog(modelIds, catalogOptionsFor(context.config)),
               },
             };
           }
@@ -323,7 +363,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
             baseUrl: ANTIGRAVITY_BASE_URL,
             api: ANTIGRAVITY_MODEL_API,
             defaultModel: ANTIGRAVITY_DEFAULT_MODEL,
-            models: buildAntigravityModelCatalog(),
+            models: buildAntigravityModelCatalog(undefined, catalogOptionsFor(context.config)),
           },
         };
       },
@@ -352,6 +392,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
       },
     },
     resolveThinkingProfile: (ctx) => antigravityThinkingProfile(ctx?.modelId),
+    resolveSystemPromptContribution: antigravitySystemPromptContribution,
     // agy accepts model ids this catalog has not caught up with. Rather than
     // fail the run, pass an unknown id straight through to `--model`.
     resolveDynamicModel: (ctx) => {
