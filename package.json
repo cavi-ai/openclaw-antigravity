@@ -39,7 +39,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=24.16.0 <25 || >=26.1.0"
   },
   "peerDependencies": {
     "openclaw": ">=2026.9.6"

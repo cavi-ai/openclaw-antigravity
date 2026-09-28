@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Node.js 20 or newer.
+- Node.js 24.16 or newer, or Node.js 26.1 or newer.
 - OpenClaw `2026.9.6` or newer. The npm peer range is
   `{{OPENCLAW_PEER_VERSION}}`, and plugin installation declares
   `{{OPENCLAW_MIN_HOST_VERSION}}`.

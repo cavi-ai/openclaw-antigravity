@@ -5,7 +5,7 @@ data.
 
 ## Development setup
 
-Requires Node.js 20 or newer. The plugin has no runtime dependencies.
+Requires Node.js 24.16 or newer, or Node.js 26.1 or newer. The plugin has no runtime dependencies.
 
 ```sh
 npm test
