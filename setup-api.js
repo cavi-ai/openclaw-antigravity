@@ -1,10 +1,4 @@
-// Lightweight setup entry. OpenClaw discovers package-root `setup-api.js`
-// for descriptor-backed setup without loading the full runtime entry.
-import { registerAntigravity } from "./src/register.js";
+// Package-root setup entry. Same provider SDK registration as the runtime entry.
+import plugin from "./src/index.js";
 
-export default {
-  id: "antigravity",
-  name: "Antigravity CLI Setup",
-  description: "Setup hooks for the Antigravity CLI provider.",
-  register: registerAntigravity,
-};
+export default plugin;

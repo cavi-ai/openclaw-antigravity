@@ -6,3 +6,8 @@ node_modules/
 /docs/antigravity/v*/
 /.release/
 /data/
+/reports/
+/plans/
+/specs/
+/docs/plans/
+/docs/specs/

@@ -3,11 +3,11 @@
 ## Requirements
 
 - Node.js 20 or newer.
-- OpenClaw `2026.7` or newer. The npm peer range is
+- OpenClaw `2026.9.6` or newer. The npm peer range is
   `{{OPENCLAW_PEER_VERSION}}`, and plugin installation declares
   `{{OPENCLAW_MIN_HOST_VERSION}}`.
 - Gateway `{{OPENCLAW_MIN_GATEWAY_VERSION}}` or newer.
-- OpenClaw plugin API `2026.7` or newer (declared as
+- OpenClaw plugin API `2026.9.6` or newer (declared as
   `{{OPENCLAW_PLUGIN_API}}`).
 - Google's Antigravity CLI (`agy`) 1.2.1 or newer installed on the Gateway host
   and already signed in. Confirm the live session with `agy models`.

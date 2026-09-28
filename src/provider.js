@@ -28,6 +28,21 @@ import {
 import { buildAntigravitySessionProfile } from "./session.js";
 
 export const ANTIGRAVITY_PROVIDER_ID = ANTIGRAVITY_BACKEND_ID;
+
+const ANTIGRAVITY_OPENCLAW_CONTEXT = [
+  "You are running through OpenClaw's Antigravity CLI model provider.",
+  "Use the installed `openclaw` CLI for OpenClaw operations and check its help before assuming command syntax.",
+  "Use `mcporter` for external MCP servers it manages and check its help before assuming command syntax.",
+  "Do not change global OpenClaw or mcporter configuration unless the user explicitly asks.",
+].join(" ");
+
+/** Provider SDK system-prompt contribution. Scoped to this provider by the host. */
+export function antigravitySystemPromptContribution(ctx) {
+  return ctx?.provider === ANTIGRAVITY_PROVIDER_ID
+    ? { stablePrefix: ANTIGRAVITY_OPENCLAW_CONTEXT }
+    : undefined;
+}
+
 const execFileAsync = promisify(execFile);
 const COMMAND_TIMEOUT_MS = 15_000;
 const LIVE_MODEL_CACHE_MS = 60_000;
@@ -377,6 +392,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
       },
     },
     resolveThinkingProfile: (ctx) => antigravityThinkingProfile(ctx?.modelId),
+    resolveSystemPromptContribution: antigravitySystemPromptContribution,
     // agy accepts model ids this catalog has not caught up with. Rather than
     // fail the run, pass an unknown id straight through to `--model`.
     resolveDynamicModel: (ctx) => {

@@ -42,7 +42,10 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "openclaw": ">=2026.7.0"
+    "openclaw": ">=2026.9.6"
+  },
+  "devDependencies": {
+    "openclaw": "2026.9.6"
   },
   "peerDependenciesMeta": {
     "openclaw": {
@@ -50,19 +53,23 @@
     }
   },
   "openclaw": {
-    "extensions": ["./src/index.js"],
-    "runtimeExtensions": ["./src/index.js"],
+    "extensions": [
+      "./src/index.js"
+    ],
+    "runtimeExtensions": [
+      "./src/index.js"
+    ],
     "install": {
       "npmSpec": "@cavi-ai/antigravity",
-      "minHostVersion": ">=2026.7.0"
+      "minHostVersion": ">=2026.9.6"
     },
     "compat": {
-      "pluginApi": ">=2026.7",
-      "minGatewayVersion": "2026.7.0"
+      "pluginApi": ">=2026.9.6",
+      "minGatewayVersion": "2026.9.6"
     },
     "build": {
-      "openclawVersion": "2026.7.0",
-      "pluginSdkVersion": "2026.7.0"
+      "openclawVersion": "2026.9.6",
+      "pluginSdkVersion": "2026.9.6"
     }
   },
   "scripts": {

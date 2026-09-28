@@ -8,9 +8,10 @@ provider state, but doctor cannot repair discovery when the plugin never loaded.
 
 ## `hook registration missing name`
 
-`0.2.0` failed during plugin register on OpenClaw hosts that require a named
-legacy hook or typed `api.on("before_prompt_build")`. Install `0.2.1` or later
-and restart the Gateway.
+`0.2.0` aborted registration by calling `registerHook` without a name. This
+plugin registers provider guidance as the provider system-prompt contribution
+and does not register that hook. Restart the Gateway after installing the
+plugin.
 
 ## `agy` is missing
 

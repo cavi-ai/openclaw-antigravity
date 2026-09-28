@@ -28,6 +28,7 @@ import {
   buildAntigravitySessionProfile,
 } from "../src/session.js";
 import { plugin } from "../src/index.js";
+import { unifiedAntigravityCatalog } from "../src/register.js";
 
 test("backend drives `agy` in print mode and parses its json result", () => {
   const { config } = buildAntigravityCliBackend();
@@ -771,39 +772,87 @@ test("labelForModelId does not append an effort tier", () => {
   assert.equal(labelForModelId("gpt-oss-120b-medium"), "GPT OSS 120b");
 });
 
-test("plugin registers both the provider and the CLI backend under one id", () => {
+test("plugin registers the provider, CLI backend, and text catalog under one id", () => {
   const calls = [];
   plugin.register({
     registerProvider: (p) => calls.push(["provider", p.id]),
     registerCliBackend: (b) => calls.push(["cli-backend", b.id]),
+    registerModelCatalogProvider: (entry) => calls.push(["catalog", entry.provider, ...entry.kinds]),
+    on() {
+      throw new Error("conversation hook");
+    },
+    registerHook() {
+      throw new Error("legacy hook");
+    },
   });
   assert.deepEqual(calls, [
     ["provider", "antigravity-cli"],
     ["cli-backend", "antigravity-cli"],
+    ["catalog", "antigravity-cli", "text"],
   ]);
 });
 
-test("plugin gives Antigravity provider-scoped OpenClaw and mcporter guidance", () => {
-  let hook;
-  let registerHookCalled = false;
+test("provider guidance is the SDK system-prompt contribution", () => {
+  let provider;
+  plugin.register({
+    registerProvider: (registered) => {
+      provider = registered;
+    },
+    registerCliBackend: () => {},
+    registerModelCatalogProvider: () => {},
+    on() {
+      throw new Error("conversation hook");
+    },
+  });
+  const guidance = provider.resolveSystemPromptContribution({
+    provider: "antigravity-cli",
+    modelId: "gemini-3.1-pro",
+  });
+  assert.match(guidance.stablePrefix, /openclaw/);
+  assert.match(guidance.stablePrefix, /mcporter/);
+  assert.equal(guidance.dynamicSuffix, undefined);
+  assert.equal(
+    provider.resolveSystemPromptContribution({ provider: "other-provider", modelId: "x" }),
+    undefined,
+  );
+});
+
+test("static model catalog provider rows come from the provider catalog", async () => {
+  let catalog;
   plugin.register({
     registerProvider: () => {},
     registerCliBackend: () => {},
-    registerHook: () => {
-      registerHookCalled = true;
-    },
-    on: (name, handler) => {
-      assert.equal(name, "before_prompt_build");
-      hook = handler;
+    registerModelCatalogProvider: (entry) => {
+      catalog = entry;
     },
   });
+  const rows = await catalog.staticCatalog();
+  assert.ok(rows.some((row) => row.model === "gemini-3.1-pro" && row.default === true && row.source === "static"));
+  assert.ok(rows.every((row) => row.kind === "text" && row.provider === "antigravity-cli"));
+});
 
-  assert.equal(registerHookCalled, false);
-  assert.equal(typeof hook, "function");
-  const guidance = hook({}, { modelProviderId: "antigravity-cli" });
-  assert.match(guidance.prependContext, /openclaw/);
-  assert.match(guidance.prependContext, /mcporter/);
-  assert.equal(hook({}, { modelProviderId: "other-provider" }), undefined);
+test("live catalog rows keep the provider default and drop blank ids", () => {
+  assert.deepEqual(
+    unifiedAntigravityCatalog(
+      {
+        provider: {
+          defaultModel: "gemini-3.1-pro",
+          models: [{ id: "gemini-3.1-pro", name: "Gemini 3.1 Pro" }, { id: "" }, { name: "missing" }],
+        },
+      },
+      "live",
+    ),
+    [
+      {
+        kind: "text",
+        provider: "antigravity-cli",
+        model: "gemini-3.1-pro",
+        label: "Gemini 3.1 Pro",
+        source: "live",
+        default: true,
+      },
+    ],
+  );
 });
 
 test("every configSchema option changes real behaviour", () => {
@@ -835,6 +884,7 @@ test("plugin passes its config through to the backend", () => {
     registerCliBackend: (b) => {
       backend = b;
     },
+    registerModelCatalogProvider: () => {},
   });
   assert.equal(backend.config.command, "/opt/agy");
 });

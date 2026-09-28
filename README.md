@@ -16,7 +16,7 @@ ingests and serves at [cavi-ai.xyz/docs/antigravity](https://cavi-ai.xyz/docs/an
 
 ## Requirements
 
-- OpenClaw 2026.7 or newer
+- OpenClaw 2026.9.6 or newer
 - Node.js 20 or newer
 - Antigravity CLI 1.2.1 or newer, installed and signed in
 
@@ -88,20 +88,7 @@ When a request runs through this provider, Antigravity is told to:
 - use `mcporter` for external MCP servers it manages; and
 - check each CLI's help before assuming command syntax.
 
-This guidance is limited to Antigravity requests and does not change either tool's global configuration.
-
-OpenClaw blocks this prompt hook for non-bundled plugins until the operator
-allows it. Requests still run without it; the guidance is not added.
-
-```json5
-{
-  plugins: {
-    entries: {
-      antigravity: { hooks: { allowConversationAccess: true } },
-    },
-  },
-}
-```
+This guidance is the provider system-prompt contribution for `antigravity-cli`. Stock OpenClaw applies it with the provider. It does not use a conversation hook, and it does not change either tool's global configuration.
 
 ## Configuration
 
