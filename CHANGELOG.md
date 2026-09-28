@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+- Register through the OpenClaw 2026.9.6 provider SDK. Provider guidance is the
+  system-prompt contribution, so `hooks.allowConversationAccess` is not used.
+  Text catalog rows are also published through the model catalog provider.
+- Require OpenClaw 2026.9.6 and Node.js 24.16 or 26.1.
+- Reconnect stores the non-secret `agy-session` marker and writes the current
+  model rows. Existing `agents.defaults.models` entries stay. A row copies the
+  Google provider's price when that provider has the same model id and a
+  non-zero rate. `agy models` does not supply a rate.
+
 ## 0.3.0
 
 - Serve the model catalog from live `agy models`, one OpenClaw id per model.
