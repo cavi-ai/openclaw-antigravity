@@ -7,13 +7,15 @@ login session, so sign in through `agy` and confirm the session with:
 agy models
 ```
 
-OpenClaw registers a local CLI connection through guided discovery, the same
-path as Ollama and LM Studio. In the Control UI, open **Models → Providers**
-and choose **Reconnect** on the Antigravity CLI card. The action validates the
-`agy` session, writes the `agy models` rows onto the provider, and records
-a non-secret session marker so the card can show the session. It does
-not copy the Antigravity access token, refresh token, or access-token expiry,
-and it does not change the default model. The provider exposes no credential environment variables.
+OpenClaw asks `agy` whether that login is usable, the same way it asks
+Claude CLI and Codex about their own sessions. In the Control UI, open
+**Models → Providers** and choose **Reconnect** on the Antigravity CLI card.
+The action checks `agy models` and writes those model rows onto the provider.
+It does not write an API key, and it does not copy the Antigravity access
+token, refresh token, or access-token expiry. It does not change the default
+model. The provider exposes no credential environment variables. A stored
+`agy-session` value on `models.providers.antigravity-cli.apiKey` is leftover
+and should be removed; `openclaw doctor --fix` deletes it.
 Reconnect installs or refreshes the bundled `openclaw-antigravity-tool-free` custom
 agent. OpenClaw uses that isolated agent only for its connection probe; normal
 provider turns keep the configured `agy` mode and tool behavior.
