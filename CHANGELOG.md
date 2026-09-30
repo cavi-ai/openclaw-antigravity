@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.1
 
 - Reconnect asks `agy` whether its own login is usable and does not write a
   provider API key. Doctor repair removes a leftover `agy-session` apiKey and
