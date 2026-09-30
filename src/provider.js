@@ -1,9 +1,10 @@
 // Provider registration for Antigravity (`agy`).
 //
 // agy owns the user's Antigravity OAuth session. Guided discovery/reconnect
-// validates that CLI-owned session, writes the listed models, and records a
-// non-secret session marker. OpenClaw does not store the Antigravity access
-// token, refresh token, or access-token expiry.
+// asks agy whether that session is usable, the same way Claude CLI and Codex
+// report their own logins, then stores the non-secret native-login marker on
+// the selected agent's auth profile. OpenClaw does not store the Antigravity
+// access token, refresh token, access-token expiry, or a provider API key.
 import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,7 +26,12 @@ import {
   openClawModelId,
   recordAntigravityModelEfforts,
 } from "./models.js";
-import { buildAntigravitySessionProfile } from "./session.js";
+import {
+  ANTIGRAVITY_NATIVE_AUTH_MARKER,
+  antigravityNativeAuthResult,
+  isAntigravityAuthMarker,
+  shouldDeferAntigravitySyntheticProfileAuth,
+} from "./session.js";
 
 export const ANTIGRAVITY_PROVIDER_ID = ANTIGRAVITY_BACKEND_ID;
 
@@ -211,15 +217,16 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
 
   const catalogOptionsFor = (config) => ({ googleModels: googleModelsFrom(config) });
 
-  // On a successful reconnect, persist the non-secret endpoint and the model
-  // rows from the `agy models` listing just fetched. A non-array `models`
-  // value, such as `$include`, is left in place. The session profile is only
-  // the marker; agy owns login refresh. Discovered refs are merged into
+  // On a successful reconnect, persist the endpoint and the model rows from
+  // the `agy models` listing just fetched. A retired apiKey marker is dropped.
+  // A non-array `models` value, such as `$include`, is left in place.
+  // agy owns login refresh. Discovered refs are merged into
   // `agents.defaults.models` the same way other provider setup patches do:
   // existing entries and aliases stay, and this provider's models are added.
   const buildConnectionPatch = (config = {}, modelIds = []) => {
     const existing = config.models?.providers?.[ANTIGRAVITY_PROVIDER_ID] ?? {};
-    const { models: existingModels, ...rest } = existing;
+    const { models: existingModels, apiKey: existingApiKey, ...rest } = existing;
+    const keepApiKey = isAntigravityAuthMarker(existingApiKey) ? undefined : existingApiKey;
     const keepModels =
       existingModels && typeof existingModels === "object" && !Array.isArray(existingModels)
         ? existingModels
@@ -236,6 +243,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
         providers: {
           [ANTIGRAVITY_PROVIDER_ID]: {
             ...rest,
+            ...(keepApiKey !== undefined ? { apiKey: keepApiKey } : {}),
             baseUrl: ANTIGRAVITY_BASE_URL,
             api: ANTIGRAVITY_MODEL_API,
             models: keepModels ?? catalog,
@@ -250,9 +258,21 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     };
   };
 
+  // The host writes an agent auth profile only when this array is non-empty.
+  // The credentials page reads that per-agent store. The value is the
+  // non-secret native-login marker, not agy's access token.
+  const sessionProfile = () => ({
+    profileId: `${ANTIGRAVITY_PROVIDER_ID}:agy`,
+    credential: {
+      type: "token",
+      provider: ANTIGRAVITY_PROVIDER_ID,
+      token: ANTIGRAVITY_NATIVE_AUTH_MARKER,
+    },
+  });
+
   const validatedResult = (modelRef, config, modelIds) => {
     return {
-      profiles: [buildAntigravitySessionProfile()],
+      profiles: [sessionProfile()],
       defaultModel: modelRef,
       configPatch: buildConnectionPatch(config, modelIds),
     };
@@ -336,6 +356,19 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
         },
       },
     ],
+    prepareSyntheticAuth: async (context = {}) => {
+      try {
+        const modelIds = await listModels(context);
+        return modelIds.length > 0 ? antigravityNativeAuthResult() : undefined;
+      } catch (error) {
+        if (isAbortError(error, context.signal)) {
+          throw error;
+        }
+        return undefined;
+      }
+    },
+    shouldDeferSyntheticProfileAuth: (params) =>
+      shouldDeferAntigravitySyntheticProfileAuth(params),
     buildMissingAuthMessage: () => MISSING_AUTH_MESSAGE,
     buildAuthDoctorHint: () => MISSING_AUTH_MESSAGE,
     catalog: {

@@ -1,22 +1,35 @@
-// Session marker for the Antigravity CLI login.
+// Shared native-login marker for the Antigravity CLI.
 //
-// agy keeps the access token, refresh token, and expiry in its own file and
-// refreshes them itself. Reconnect records a non-secret marker so the providers
-// page can show a session. OpenClaw does not copy those tokens or their expiry:
-// a past access-token expiry would mark the profile dead even while agy is
-// still signed in.
+// Claude CLI and Codex report their own login to OpenClaw. agy does the same:
+// it keeps the access token, refresh token, and expiry, and OpenClaw only
+// records that the CLI session is usable. This marker is not an API key.
 
-export const ANTIGRAVITY_SESSION_PROFILE_ID = "antigravity-cli:agy";
-/** Non-secret marker. agy still authenticates the turn from its own login. */
+/** Marker returned when `agy models` shows a live CLI login. */
+export const ANTIGRAVITY_NATIVE_AUTH_MARKER = ["openclaw", "antigravity-cli-native-auth"].join(
+  ":",
+);
+
+/** Retired provider-config marker. Doctor removes it. It is not a login. */
 export const ANTIGRAVITY_SESSION_MARKER = "agy-session";
 
-export function buildAntigravitySessionProfile() {
+export const ANTIGRAVITY_SYNTHETIC_AUTH_SOURCE = "Antigravity CLI native login";
+
+const AUTH_MARKERS = new Set([ANTIGRAVITY_NATIVE_AUTH_MARKER, ANTIGRAVITY_SESSION_MARKER]);
+
+/** @param {unknown} value */
+export function isAntigravityAuthMarker(value) {
+  return typeof value === "string" && AUTH_MARKERS.has(value.trim());
+}
+
+export function antigravityNativeAuthResult() {
   return {
-    profileId: ANTIGRAVITY_SESSION_PROFILE_ID,
-    credential: {
-      type: "token",
-      provider: "antigravity-cli",
-      token: ANTIGRAVITY_SESSION_MARKER,
-    },
+    apiKey: ANTIGRAVITY_NATIVE_AUTH_MARKER,
+    mode: "oauth",
+    source: ANTIGRAVITY_SYNTHETIC_AUTH_SOURCE,
   };
+}
+
+/** @param {{ resolvedApiKey?: string }} [params] */
+export function shouldDeferAntigravitySyntheticProfileAuth(params = {}) {
+  return isAntigravityAuthMarker(params.resolvedApiKey);
 }

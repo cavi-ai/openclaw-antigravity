@@ -38,11 +38,11 @@ Restart the OpenClaw Gateway after installation.
 ## Connect
 
 In the Control UI, open **Models → Providers** and choose **Reconnect** on the
-Antigravity CLI card. The plugin validates the existing `agy` session and
-writes the `agy models` rows onto the provider. It records a non-secret
-session marker so the card can show the session. It does not copy the
-Antigravity access token, refresh token, or access-token expiry, and it does
-not change the default model.
+Antigravity CLI card. The plugin asks `agy` whether its login is usable and
+writes the `agy models` rows onto the provider. The login stays in `agy`. The
+plugin does not write an API key, and it does not copy the Antigravity access
+token, refresh token, or access-token expiry. It does not change the default
+model.
 Reconnect installs
 or refreshes the bundled `openclaw-antigravity-tool-free` custom agent, which
 OpenClaw uses only for its connection probe. Normal provider turns keep the

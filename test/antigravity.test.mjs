@@ -23,9 +23,10 @@ import {
   parseAntigravityModelIds,
 } from "../src/provider.js";
 import {
-  ANTIGRAVITY_SESSION_MARKER,
-  ANTIGRAVITY_SESSION_PROFILE_ID,
-  buildAntigravitySessionProfile,
+  ANTIGRAVITY_NATIVE_AUTH_MARKER,
+  ANTIGRAVITY_SYNTHETIC_AUTH_SOURCE,
+  antigravityNativeAuthResult,
+  shouldDeferAntigravitySyntheticProfileAuth,
 } from "../src/session.js";
 import { plugin } from "../src/index.js";
 import { unifiedAntigravityCatalog } from "../src/register.js";
@@ -316,6 +317,8 @@ test("provider exposes guided reconnect without storing OpenClaw credentials", (
   assert.equal(typeof provider.auth[0].appGuidedSetup.detectAvailability, "function");
   assert.equal(typeof provider.auth[0].appGuidedSetup.detect, "function");
   assert.equal(typeof provider.auth[0].appGuidedSetup.prepare, "function");
+  assert.equal(typeof provider.prepareSyntheticAuth, "function");
+  assert.equal(typeof provider.shouldDeferSyntheticProfileAuth, "function");
 });
 
 test("guided reconnect detects the preferred model through the configured agy command", async () => {
@@ -359,18 +362,49 @@ function sessionDeps(runCommand) {
   return { runCommand };
 }
 
-const SESSION_MARKER_PROFILE = {
-  profileId: ANTIGRAVITY_SESSION_PROFILE_ID,
+const sessionProfile = {
+  profileId: "antigravity-cli:agy",
   credential: {
     type: "token",
     provider: "antigravity-cli",
-    token: ANTIGRAVITY_SESSION_MARKER,
+    token: ANTIGRAVITY_NATIVE_AUTH_MARKER,
   },
 };
 
-test("session profile is a marker and does not store agy tokens or expiry", () => {
-  assert.deepEqual(buildAntigravitySessionProfile(), SESSION_MARKER_PROFILE);
-  assert.equal("expires" in buildAntigravitySessionProfile().credential, false);
+test("synthetic auth reports the agy login and stays quiet when agy is signed out", async () => {
+  const signedIn = buildAntigravityProvider(
+    {},
+    sessionDeps(async () => "gemini-3.1-pro-high\tGemini 3.1 Pro High\n"),
+  );
+  assert.deepEqual(await signedIn.prepareSyntheticAuth({ env: {} }), antigravityNativeAuthResult());
+  assert.equal(
+    (await signedIn.prepareSyntheticAuth({ env: {} })).apiKey,
+    ANTIGRAVITY_NATIVE_AUTH_MARKER,
+  );
+  assert.equal(
+    (await signedIn.prepareSyntheticAuth({ env: {} })).mode,
+    "oauth",
+  );
+  assert.equal(
+    (await signedIn.prepareSyntheticAuth({ env: {} })).source,
+    ANTIGRAVITY_SYNTHETIC_AUTH_SOURCE,
+  );
+
+  const signedOut = buildAntigravityProvider(
+    {},
+    sessionDeps(async () => {
+      throw new Error("not logged in");
+    }),
+  );
+  assert.equal(await signedOut.prepareSyntheticAuth({ env: {} }), undefined);
+  assert.equal(signedIn.shouldDeferSyntheticProfileAuth({ resolvedApiKey: "agy-session" }), true);
+  assert.equal(
+    signedIn.shouldDeferSyntheticProfileAuth({
+      resolvedApiKey: ` ${ANTIGRAVITY_NATIVE_AUTH_MARKER} `,
+    }),
+    true,
+  );
+  assert.equal(shouldDeferAntigravitySyntheticProfileAuth({ resolvedApiKey: "user-key" }), false);
 });
 
 test("guided reconnect prepares only a model currently reported by agy", async () => {
@@ -391,7 +425,7 @@ test("guided reconnect prepares only a model currently reported by agy", async (
       modelRef: "antigravity-cli/claude-sonnet-4-6",
     }),
     {
-      profiles: [SESSION_MARKER_PROFILE],
+      profiles: [sessionProfile],
       defaultModel: "antigravity-cli/claude-sonnet-4-6",
       configPatch: {
         models: {
@@ -522,7 +556,7 @@ test("guided reconnect propagates cancellation", async () => {
   );
 });
 
-test("interactive reconnect records the session marker without agy tokens", async () => {
+test("interactive reconnect records the agent login marker without agy tokens", async () => {
   const provider = buildAntigravityProvider(
     {},
     sessionDeps(async (_command, args) =>
@@ -531,7 +565,7 @@ test("interactive reconnect records the session marker without agy tokens", asyn
   );
 
   assert.deepEqual(await provider.auth[0].run({ config: {}, env: {} }), {
-    profiles: [SESSION_MARKER_PROFILE],
+    profiles: [sessionProfile],
     defaultModel: "antigravity-cli/gemini-3.1-pro",
     configPatch: {
       models: {
@@ -568,6 +602,7 @@ test("reconnect preserves explicit provider settings and writes the live model r
       providers: {
         "antigravity-cli": {
           baseUrl: "http://stale.invalid",
+          apiKey: "agy-session",
           label: "kept",
           timeoutSeconds: 90,
           params: { owner: "user" },

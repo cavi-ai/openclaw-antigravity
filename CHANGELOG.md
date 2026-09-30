@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Reconnect asks `agy` whether its own login is usable and does not write a
+  provider API key. Doctor repair removes a leftover `agy-session` apiKey and
+  leftover Antigravity auth profile bindings.
+
 ## 0.4.0
 
 - Register through the OpenClaw 2026.9.6 provider SDK. Provider guidance is the

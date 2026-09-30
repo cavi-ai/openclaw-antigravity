@@ -12,6 +12,10 @@
   "cliBackends": ["antigravity-cli"],
   "autoEnableWhenConfiguredProviders": ["antigravity-cli"],
   "syntheticAuthRefs": ["antigravity-cli"],
+  "nonSecretAuthMarkers": ["openclaw:antigravity-cli-native-auth", "agy-session"],
+  "doctorContract": {
+    "configRepair": true
+  },
   "modelCatalog": {
     "discovery": {
       "antigravity-cli": "refreshable"

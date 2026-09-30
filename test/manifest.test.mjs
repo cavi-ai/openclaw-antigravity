@@ -5,7 +5,7 @@ import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import setupApi from "../setup-api.js";
-import { sessionRouteStateOwners } from "../doctor-contract-api.js";
+import { normalizeCompatibilityConfig, sessionRouteStateOwners } from "../doctor-contract-api.js";
 import { PLUGIN_ID, plugin } from "../src/index.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -19,6 +19,11 @@ test("manifest omits invalid PluginKind and owns antigravity-cli", () => {
   assert.deepEqual(manifest.providers, ["antigravity-cli"]);
   assert.deepEqual(manifest.cliBackends, ["antigravity-cli"]);
   assert.deepEqual(manifest.syntheticAuthRefs, ["antigravity-cli"]);
+  assert.deepEqual(manifest.nonSecretAuthMarkers, [
+    "openclaw:antigravity-cli-native-auth",
+    "agy-session",
+  ]);
+  assert.equal(manifest.doctorContract.configRepair, true);
   assert.equal(manifest.contracts, undefined);
   assert.equal(manifest.modelCatalog.discovery["antigravity-cli"], "refreshable");
   assert.deepEqual(manifest.autoEnableWhenConfiguredProviders, ["antigravity-cli"]);
@@ -98,6 +103,74 @@ test("doctor contract owns antigravity-cli session routes", () => {
   assert.ok(owner.runtimeIds.includes("antigravity-cli"));
   assert.ok(owner.cliSessionKeys.includes("antigravity-cli"));
   assert.ok(owner.authProfilePrefixes.some((p) => p.startsWith("antigravity-cli:")));
+});
+
+test("doctor repair drops Antigravity auth bindings and leaves other providers", () => {
+  const repaired = normalizeCompatibilityConfig({
+    cfg: {
+      models: {
+        providers: {
+          "antigravity-cli": { baseUrl: "http://127.0.0.1/antigravity-cli" },
+          ollama: { apiKey: "ollama-local" },
+        },
+      },
+      auth: {
+        profiles: {
+          "antigravity-cli:default": { provider: "antigravity-cli", mode: "oauth" },
+          "antigravity-cli:agy": { provider: "antigravity-cli", mode: "token" },
+          "ollama:default": { provider: "ollama", mode: "api_key" },
+        },
+        order: {
+          "antigravity-cli": ["antigravity-cli:agy", "antigravity-cli:default"],
+          openai: ["openai:default"],
+        },
+      },
+    },
+  });
+
+  assert.equal(repaired.config.models.providers["antigravity-cli"].apiKey, undefined);
+  assert.equal(repaired.config.models.providers.ollama.apiKey, "ollama-local");
+  assert.deepEqual(repaired.config.auth.profiles, {
+    "ollama:default": { provider: "ollama", mode: "api_key" },
+  });
+  assert.deepEqual(repaired.config.auth.order, { openai: ["openai:default"] });
+  assert.ok(repaired.changes.length > 0);
+});
+
+test("doctor repair removes a stored agy-session key and still drops stale profiles", () => {
+  const repaired = normalizeCompatibilityConfig({
+    cfg: {
+      models: {
+        providers: {
+          "antigravity-cli": { apiKey: "agy-session", baseUrl: "http://127.0.0.1/antigravity-cli" },
+        },
+      },
+      auth: {
+        profiles: {
+          "antigravity-cli:default": { provider: "antigravity-cli", mode: "oauth" },
+        },
+      },
+    },
+  });
+
+  assert.equal(repaired.config.models.providers["antigravity-cli"].apiKey, undefined);
+  assert.equal(repaired.config.models.providers["antigravity-cli"].baseUrl, "http://127.0.0.1/antigravity-cli");
+  assert.equal(repaired.config.auth, undefined);
+  assert.deepEqual(repaired.changes, [
+    "Removed the Antigravity provider apiKey marker. agy owns the login.",
+    "Removed Antigravity auth profile bindings.",
+  ]);
+});
+
+test("doctor repair leaves a different Antigravity apiKey and unrelated config", () => {
+  const cfg = {
+    models: { providers: { "antigravity-cli": { apiKey: "user-key" } } },
+    auth: { profiles: { "openai:default": { provider: "openai", mode: "oauth" } } },
+  };
+  const repaired = normalizeCompatibilityConfig({ cfg });
+  assert.equal(repaired.config, cfg);
+  assert.deepEqual(repaired.changes, []);
+  assert.equal(repaired.config.models.providers["antigravity-cli"].apiKey, "user-key");
 });
 
 test("runtime entry is definePluginEntry from the provider SDK", () => {
