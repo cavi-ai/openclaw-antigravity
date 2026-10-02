@@ -2,7 +2,8 @@ name: Publish release documentation
 
 # Build the immutable documentation artifact for a published GitHub Release,
 # attach it to that release, and dispatch cavi-home to ingest it so the docs
-# appear at cavi-ai.xyz/docs/antigravity. The release tag drives the version;
+# appear at cavi-ai.xyz/docs/antigravity. The same release publishes the npm
+# package and the ClawHub code plugin. The release tag drives the version;
 # scripts/docs validate it against package.json, so this workflow is not pinned
 # to any single version.
 
@@ -191,3 +192,20 @@ jobs:
           jq -n --argjson payload "$(cat "$ENVELOPE")" \
             '{event_type:"cavi-oss-release",client_payload:$payload}' | \
             gh api --method POST /repos/cavi-ai/cavi-home/dispatches --input -
+
+  # openclaw/clawhub v0.23.3. Real publishes require CLAWHUB_TOKEN; OIDC alone
+  # is only accepted for workflow_dispatch, which this job does not run.
+  clawhub:
+    needs: publish
+    if: ${{ github.event_name == 'release' }}
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    uses: openclaw/clawhub/.github/workflows/package-publish.yml@87ca030c30f3cfb78ab15c8e66b5ff1469c8f9c8
+    with:
+      dry_run: false
+      owner: cavi-ai
+      family: code-plugin
+    secrets:
+      clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}

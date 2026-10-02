@@ -138,9 +138,10 @@ default model, and pre-existing `agy` plugins are not changed. Set `AGY_BIN` or
 `OPENCLAW_BIN` to use a non-default executable.
 
 Releasing docs is automated: publish a GitHub Release `vX.Y.Z` (matching
-`package.json`) and the `Publish release documentation` workflow builds the
-versioned artifact, attaches it to the release, and dispatches cavi-home to
-ingest it. See [CONTRIBUTING.md](CONTRIBUTING.md).
+`package.json`) and the `Publish release documentation` workflow publishes the
+npm package and the ClawHub plugin, builds the versioned artifact, attaches it
+to the release, and dispatches cavi-home to ingest it. See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

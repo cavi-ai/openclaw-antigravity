@@ -45,10 +45,12 @@ Documentation is released with the package, not by hand:
 
 1. Bump `version` in `package.json` and update `CHANGELOG.md`.
 2. Publish a GitHub Release tagged `vX.Y.Z` that matches that version.
-3. The `Publish release documentation` workflow builds the versioned artifact
-   from `docs/antigravity/source/`, verifies it against `package.json`, attaches
-   `antigravity-docs-vX.Y.Z.tar.gz` (with its `.sha256`) to the release, and
-   dispatches `cavi-ai/cavi-home` to ingest it.
+3. The `Publish release documentation` workflow publishes the npm package,
+   builds the versioned artifact from `docs/antigravity/source/`, verifies it
+   against `package.json`, attaches `antigravity-docs-vX.Y.Z.tar.gz` (with its
+   `.sha256`) to the release, dispatches `cavi-ai/cavi-home` to ingest it, and
+   publishes the code plugin to ClawHub. ClawHub publish uses the repository
+   secret `CLAWHUB_TOKEN`.
 4. cavi-home serves the ingested version at `cavi-ai.xyz/docs/antigravity`.
 
 The release tag must equal `v` + the `package.json` version or the workflow
