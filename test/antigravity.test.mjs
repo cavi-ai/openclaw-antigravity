@@ -319,6 +319,7 @@ test("provider exposes guided reconnect without storing OpenClaw credentials", (
   assert.equal(typeof provider.auth[0].appGuidedSetup.prepare, "function");
   assert.equal(typeof provider.prepareSyntheticAuth, "function");
   assert.equal(typeof provider.shouldDeferSyntheticProfileAuth, "function");
+  assert.equal(provider.aliases, undefined);
 });
 
 test("guided reconnect detects the preferred model through the configured agy command", async () => {
@@ -361,15 +362,6 @@ test("model discovery accepts tab- and space-separated agy output from either st
 function sessionDeps(runCommand) {
   return { runCommand };
 }
-
-const sessionProfile = {
-  profileId: "antigravity-cli:agy",
-  credential: {
-    type: "token",
-    provider: "antigravity-cli",
-    token: ANTIGRAVITY_NATIVE_AUTH_MARKER,
-  },
-};
 
 test("synthetic auth reports the agy login and stays quiet when agy is signed out", async () => {
   const signedIn = buildAntigravityProvider(
@@ -425,7 +417,7 @@ test("guided reconnect prepares only a model currently reported by agy", async (
       modelRef: "antigravity-cli/claude-sonnet-4-6",
     }),
     {
-      profiles: [sessionProfile],
+      profiles: [],
       defaultModel: "antigravity-cli/claude-sonnet-4-6",
       configPatch: {
         models: {
@@ -438,14 +430,6 @@ test("guided reconnect prepares only a model currently reported by agy", async (
                 "gemini-3.8-flash-high",
                 "claude-sonnet-4-6",
               ]),
-            },
-          },
-        },
-        agents: {
-          defaults: {
-            models: {
-              "antigravity-cli/gemini-3.8-flash": {},
-              "antigravity-cli/claude-sonnet-4-6": {},
             },
           },
         },
@@ -556,7 +540,7 @@ test("guided reconnect propagates cancellation", async () => {
   );
 });
 
-test("interactive reconnect records the agent login marker without agy tokens", async () => {
+test("interactive reconnect refreshes the provider catalog without an auth profile", async () => {
   const provider = buildAntigravityProvider(
     {},
     sessionDeps(async (_command, args) =>
@@ -565,7 +549,7 @@ test("interactive reconnect records the agent login marker without agy tokens", 
   );
 
   assert.deepEqual(await provider.auth[0].run({ config: {}, env: {} }), {
-    profiles: [sessionProfile],
+    profiles: [],
     defaultModel: "antigravity-cli/gemini-3.1-pro",
     configPatch: {
       models: {
@@ -575,13 +559,6 @@ test("interactive reconnect records the agent login marker without agy tokens", 
             baseUrl: ANTIGRAVITY_BASE_URL,
             api: ANTIGRAVITY_MODEL_API,
             models: buildAntigravityModelCatalog(["gemini-3.1-pro-high"]),
-          },
-        },
-      },
-      agents: {
-        defaults: {
-          models: {
-            "antigravity-cli/gemini-3.1-pro": {},
           },
         },
       },
@@ -628,17 +605,11 @@ test("reconnect preserves explicit provider settings and writes the live model r
         },
       },
     },
-    agents: {
-      defaults: {
-        models: {
-          "antigravity-cli/gemini-3.1-pro": {},
-        },
-      },
-    },
   });
+  assert.equal(result.configPatch.agents, undefined);
 });
 
-test("reconnect merges discovered models into existing defaults.models entries", async () => {
+test("reconnect does not write an agent model map or model policy", async () => {
   const provider = buildAntigravityProvider(
     {},
     sessionDeps(async (_command, args) =>
@@ -653,17 +624,21 @@ test("reconnect merges discovered models into existing defaults.models entries",
             "anthropic/claude-sonnet-4-6": { alias: "Sonnet" },
             "antigravity-cli/gemini-3.8-flash": { alias: "Flash" },
           },
+          modelPolicy: { allow: ["anthropic/*"] },
+        },
+        entries: {
+          scout: {
+            modelPolicy: { allow: ["openai/gpt-5.4"] },
+          },
         },
       },
     },
     env: {},
   });
 
-  assert.deepEqual(result.configPatch.agents.defaults.models, {
-    "anthropic/claude-sonnet-4-6": { alias: "Sonnet" },
-    "antigravity-cli/gemini-3.8-flash": { alias: "Flash" },
-  });
-  assert.equal(result.configPatch.agents.defaults.modelPolicy, undefined);
+  assert.equal(result.profiles.length, 0);
+  assert.equal(result.configPatch.agents, undefined);
+  assert.equal(result.configPatch.models.providers["antigravity-cli"].models[0].id, "gemini-3.8-flash");
 });
 
 test("missing-auth guidance points at agy login, not an OpenClaw API key", () => {

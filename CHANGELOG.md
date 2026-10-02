@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2
+
+- Reconnect does not write an auth profile or `agents.defaults.models`. Model
+  rows stay on the provider catalog.
+- Publish only `antigravity-cli`. Provider aliases `agy` and `antigravity` were
+  separate catalog cards with the same models.
+
 ## 0.4.1
 
 - Reconnect asks `agy` whether its own login is usable and does not write a

@@ -33,8 +33,8 @@ with `agy models`, and keep credentials out of OpenClaw configuration.
 ## A model is missing after connect
 
 Use `antigravity-cli/<model>`. Reconnect the provider so the current `agy models`
-list is saved. Existing `agents.defaults.models` entries stay, and the models
-from that listing are added.
+list is saved on the provider. Reconnect does not change `agents.defaults.models`
+or a model allow policy.
 
 ## A tool call waits for approval
 
