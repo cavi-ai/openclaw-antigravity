@@ -2,8 +2,7 @@
 //
 // agy owns the user's Antigravity OAuth session. Guided discovery/reconnect
 // asks agy whether that session is usable, the same way Claude CLI and Codex
-// report their own logins, then stores the non-secret native-login marker on
-// the selected agent's auth profile. OpenClaw does not store the Antigravity
+// report their own logins. OpenClaw does not store an Antigravity auth profile,
 // access token, refresh token, access-token expiry, or a provider API key.
 import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -27,7 +26,6 @@ import {
   recordAntigravityModelEfforts,
 } from "./models.js";
 import {
-  ANTIGRAVITY_NATIVE_AUTH_MARKER,
   antigravityNativeAuthResult,
   isAntigravityAuthMarker,
   shouldDeferAntigravitySyntheticProfileAuth,
@@ -220,9 +218,9 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
   // On a successful reconnect, persist the endpoint and the model rows from
   // the `agy models` listing just fetched. A retired apiKey marker is dropped.
   // A non-array `models` value, such as `$include`, is left in place.
-  // agy owns login refresh. Discovered refs are merged into
-  // `agents.defaults.models` the same way other provider setup patches do:
-  // existing entries and aliases stay, and this provider's models are added.
+  // The patch stays on the provider catalog. `agents.defaults.models` is an
+  // allowlist until model-policy migration, and copying refs there blocks every
+  // other model. Setup also projects that map onto the selected agent's policy.
   const buildConnectionPatch = (config = {}, modelIds = []) => {
     const existing = config.models?.providers?.[ANTIGRAVITY_PROVIDER_ID] ?? {};
     const { models: existingModels, apiKey: existingApiKey, ...rest } = existing;
@@ -232,11 +230,6 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
         ? existingModels
         : undefined;
     const catalog = buildAntigravityModelCatalog(modelIds, catalogOptionsFor(config));
-    const modelEntries = { ...(config.agents?.defaults?.models ?? {}) };
-    for (const model of catalog) {
-      const ref = `${ANTIGRAVITY_PROVIDER_ID}/${model.id}`;
-      modelEntries[ref] = { ...(modelEntries[ref] ?? {}) };
-    }
     return {
       models: {
         mode: config.models?.mode ?? "merge",
@@ -250,29 +243,14 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
           },
         },
       },
-      agents: {
-        defaults: {
-          models: modelEntries,
-        },
-      },
     };
   };
 
-  // The host writes an agent auth profile only when this array is non-empty.
-  // The credentials page reads that per-agent store. The value is the
-  // non-secret native-login marker, not agy's access token.
-  const sessionProfile = () => ({
-    profileId: `${ANTIGRAVITY_PROVIDER_ID}:agy`,
-    credential: {
-      type: "token",
-      provider: ANTIGRAVITY_PROVIDER_ID,
-      token: ANTIGRAVITY_NATIVE_AUTH_MARKER,
-    },
-  });
-
+  // An empty profile list keeps the host from writing an auth profile. agy owns
+  // the login; `prepareSyntheticAuth` reports whether that login is usable.
   const validatedResult = (modelRef, config, modelIds) => {
     return {
-      profiles: [sessionProfile()],
+      profiles: [],
       defaultModel: modelRef,
       configPatch: buildConnectionPatch(config, modelIds),
     };
@@ -281,7 +259,9 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
   return {
     id: ANTIGRAVITY_PROVIDER_ID,
     label: "Antigravity CLI",
-    aliases: ["antigravity", "agy"],
+    // Aliases are published as their own provider catalogs. `agy` and
+    // `antigravity` then appear beside `antigravity-cli`, each with the same
+    // models and an API-key card.
     envVars: [],
     auth: [
       {

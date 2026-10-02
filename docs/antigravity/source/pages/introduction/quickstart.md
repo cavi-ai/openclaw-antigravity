@@ -12,8 +12,8 @@ openclaw agent --model antigravity-cli/gemini-3.1-pro -m "hello"
 ```
 
 The general form is `antigravity-cli/<model>`. Reconnect saves the current
-`agy models` list with the provider and merges those refs into
-`agents.defaults.models` without removing entries already there.
+`agy models` list on the provider. It does not add those refs to
+`agents.defaults.models` or to a model allow policy.
 
 Print mode returns the completed JSON response rather than token streaming. It
 accepts text prompts and does not add inline image support.

@@ -49,7 +49,7 @@ test("configSchema rejects unknown keys", () => {
 
 test("package.json is ClawHub-ready and ships setup/doctor modules", () => {
   assert.equal(manifest.version, pkg.version);
-  assert.equal(pkg.version, "0.4.1");
+  assert.equal(pkg.version, "0.4.2");
   assert.equal(plugin.version, undefined);
   assert.equal(plugin.id, manifest.id);
   assert.equal(plugin.name, manifest.name);
