@@ -159,6 +159,26 @@ test("release workflow publishes npm through trusted publishing before documenta
   assert.doesNotMatch(workflow, /(?:NPM_TOKEN|NODE_AUTH_TOKEN)/u);
 });
 
+test("release workflow publishes the ClawHub package only for a published release", async () => {
+  const workflow = await readFile(path.join(ROOT, ".github/workflows/publish-docs.yml"), "utf8");
+  assert.match(
+    workflow,
+    /uses: openclaw\/clawhub\/\.github\/workflows\/package-publish\.yml@87ca030c30f3cfb78ab15c8e66b5ff1469c8f9c8/u,
+  );
+  assert.match(
+    workflow,
+    /clawhub:\n\s+needs: publish\n\s+if: \$\{\{ github\.event_name == 'release' \}\}/u,
+  );
+  for (const phrase of [
+    "dry_run: false",
+    "owner: cavi-ai",
+    "family: code-plugin",
+    "clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}",
+  ]) {
+    assert.ok(workflow.includes(phrase), phrase);
+  }
+});
+
 test("manual backfills cannot publish npm from a mismatched provenance ref", async () => {
   const workflow = await readFile(path.join(ROOT, ".github/workflows/publish-docs.yml"), "utf8");
   assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/u);
