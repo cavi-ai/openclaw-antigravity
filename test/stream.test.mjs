@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { buildAntigravityCliBackend } from "../src/cli-backend.js";
 
 const parse = (record) => buildAntigravityCliBackend().parseJsonlEvent(JSON.stringify(record));
@@ -100,4 +103,25 @@ test("transport cleans up the child when its consumer stops or the run is cancel
   const stoppedPid = Number((await stopped.next()).value.conversation_id);
   await stopped.return();
   assert.throws(() => process.kill(stoppedPid, 0), { code: "ESRCH" });
+});
+
+test("transport terminates native tool descendants holding inherited pipes", async () => {
+  if (process.platform === "win32") return;
+  const root = await mkdtemp(join(tmpdir(), "agy-process-tree-"));
+  const marker = join(root, "terminated");
+  const controller = new AbortController();
+  const nativeTool = `process.on('SIGTERM',()=>{require('node:fs').writeFileSync(${JSON.stringify(marker)},'terminated');process.exit(0)});console.log(JSON.stringify({event:'init',conversation_id:String(process.pid)}));setTimeout(()=>process.exit(0),2000);`;
+  const parent = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(nativeTool)}],{stdio:['ignore','inherit','inherit']});setInterval(()=>{},10000);`;
+  const iterator = buildAntigravityCliBackend().prepareExecution().execute({ command: process.execPath, args: ["-e", parent], cwd: process.cwd(), env: process.env, prompt: "fixture", abortSignal: controller.signal });
+  try {
+    await iterator.next();
+    const pending = iterator.next();
+    controller.abort();
+    await assert.rejects(pending, /abort/i);
+    assert.equal(await readFile(marker, "utf8"), "terminated");
+  } finally {
+    controller.abort();
+    await iterator.return();
+    await rm(root, { recursive: true, force: true });
+  }
 });

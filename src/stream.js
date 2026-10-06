@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { join } from "node:path";
 
 const MAX_LINE_CHARS = 1_048_576;
 const STDERR_TAIL_CHARS = 16_384;
@@ -107,6 +108,7 @@ export async function* executeAntigravityStream(context) {
   const child = spawn(context.command, args, {
     cwd: context.cwd, env: context.env, argv0: context.argv0,
     stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
+    detached: process.platform !== "win32",
   });
   let closed = false;
   let killTimer;
@@ -120,10 +122,25 @@ export async function* executeAntigravityStream(context) {
       resolve({ code, signal, error });
     });
   });
+  const killTree = (signal) => {
+    if (!child.pid) return;
+    if (process.platform === "win32") {
+      // Windows has no POSIX process groups; use the OS process-tree terminator.
+      const taskkill = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
+      const killer = spawn(taskkill, ["/PID", String(child.pid), "/T", ...(signal === "SIGKILL" ? ["/F"] : [])], {
+        stdio: "ignore", windowsHide: true,
+      });
+      killer.once("error", () => child.kill(signal));
+      killer.once("exit", (code) => { if (code !== 0) child.kill(signal); });
+    } else {
+      try { process.kill(-child.pid, signal); }
+      catch (error) { if (error.code !== "ESRCH") throw error; }
+    }
+  };
   const terminate = () => {
     if (closed || killTimer) return;
-    child.kill("SIGTERM");
-    killTimer = setTimeout(() => { if (!closed) child.kill("SIGKILL"); }, 1_000);
+    killTree("SIGTERM");
+    killTimer = setTimeout(() => { if (!closed) killTree("SIGKILL"); }, 1_000);
     killTimer.unref();
   };
   context.abortSignal?.addEventListener("abort", terminate, { once: true });
