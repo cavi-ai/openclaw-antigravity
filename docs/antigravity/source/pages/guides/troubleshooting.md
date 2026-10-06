@@ -42,3 +42,17 @@ Non-interactive print mode cannot answer prompts. Keep the default
 `mode: accept-edits`, or choose `none` only when the intended `agy` permission
 handling works for the deployment. Enable `skipPermissions` only after accepting
 the security tradeoff.
+
+## `/compact` is unsupported
+
+Antigravity owns automatic compaction of its native conversation. The plugin
+does not expose a manual compaction command because headless `agy` does not
+provide a machine-readable acknowledgement that `/compact` compacted the
+conversation. Its current event format also omits dedicated compaction status
+events.
+
+## A stream ends without a terminal result
+
+The plugin requires a terminal AGY result and a successful process exit. A
+truncated stream can contain partial text or completed tool actions. Check
+those actions before retrying; the error does not roll them back.

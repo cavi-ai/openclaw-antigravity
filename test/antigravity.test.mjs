@@ -31,11 +31,17 @@ import {
 import { plugin } from "../src/index.js";
 import { unifiedAntigravityCatalog } from "../src/register.js";
 
-test("backend drives `agy` in print mode and parses its json result", () => {
-  const { config } = buildAntigravityCliBackend();
+test("backend streams agy events and leaves native compaction with agy", () => {
+  const backend = buildAntigravityCliBackend();
+  const { config } = backend;
   assert.match(config.command, /(^|[\\/])agy(\.exe)?$/u);
-  assert.equal(config.output, "json");
-  assert.deepEqual(config.args.slice(0, 4), ["--print", "{prompt}", "--output-format", "json"]);
+  assert.equal(config.output, "jsonl");
+  assert.equal(config.resumeOutput, "jsonl");
+  assert.deepEqual(config.args.slice(0, 4), ["--print", "{prompt}", "--output-format", "stream-json"]);
+  assert.equal(typeof backend.parseJsonlEvent, "function");
+  assert.equal(typeof backend.prepareExecution().execute, "function");
+  assert.equal(backend.ownsNativeCompaction, true);
+  assert.equal(backend.manualCompaction, undefined);
 });
 
 test("resolves agy from ~/.local/bin when the Gateway PATH omits it", () => {

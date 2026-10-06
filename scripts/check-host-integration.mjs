@@ -208,6 +208,8 @@ export async function withTemporaryRoot(run) {
 export async function runHostIntegrationCheck({
   openclaw = process.env.OPENCLAW_BIN?.trim() || "openclaw",
   agy = process.env.AGY_BIN?.trim() || "agy",
+  verifyRuntime,
+  checkReconnect = true,
 } = {}) {
   const pluginRoot = dirname(dirname(fileURLToPath(import.meta.url)));
   const packageJson = JSON.parse(await readFile(join(pluginRoot, "package.json"), "utf8"));
@@ -228,8 +230,10 @@ export async function runHostIntegrationCheck({
         ...process.env,
         HOME: isolatedHome,
         USERPROFILE: isolatedHome,
+        OPENCLAW_HOME: isolatedHome,
         OPENCLAW_CONFIG_PATH: configPath,
         OPENCLAW_STATE_DIR: stateDir,
+        ...(!checkReconnect ? { OPENCLAW_DISABLE_BUNDLED_PLUGINS: "1" } : {}),
       };
       const gatewayOutput = [];
       let gateway;
@@ -241,6 +245,7 @@ export async function runHostIntegrationCheck({
           `${JSON.stringify(
             {
               gateway: { mode: "local", bind: "loopback", auth: { mode: "token" } },
+              agents: { defaults: { workspace: join(tempRoot, "stream-workspace") } },
               plugins: {
                 allow: ["antigravity"],
                 load: { paths: [pluginRoot] },
@@ -275,6 +280,19 @@ export async function runHostIntegrationCheck({
         const diagnostics = () => boundedDiagnostics(gatewayOutput);
 
         await waitForGateway(openclaw, gatewayUrl, gatewayToken, env, gateway, diagnostics);
+        if (!checkReconnect) {
+          let runtime;
+          try {
+            runtime = await verifyRuntime({ gatewayUrl, gatewayToken, env, tempRoot });
+          } catch (error) {
+            throw new Error(`${error.message}${diagnostics()}`, { cause: error });
+          }
+          return {
+            pluginVersion: packageJson.version,
+            hostVersion: hostVersion.join("."),
+            runtime,
+          };
+        }
         const status = parseJsonOutput(
           openclaw,
           buildGatewayCallArgs("models.authStatus", gatewayUrl, gatewayToken),
@@ -301,12 +319,16 @@ export async function runHostIntegrationCheck({
           ),
           candidate,
         );
+        const runtime = verifyRuntime
+          ? await verifyRuntime({ gatewayUrl, gatewayToken, env, tempRoot })
+          : undefined;
         return {
           pluginVersion: packageJson.version,
           hostVersion: hostVersion.join("."),
           agyModelCount: modelIds.length,
           action,
           activation,
+          ...(runtime ? { runtime } : {}),
         };
       } finally {
         if (gateway) await stopGateway(gateway);

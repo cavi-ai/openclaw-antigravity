@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Stream AGY response text and native tool starts/results through OpenClaw's
+  custom JSONL parser. Preserve conversation ids on resume and report usage
+  for the current turn rather than counting earlier turns again.
+- Reject malformed, oversized, or incomplete streams and terminate the native
+  process when a run is cancelled.
+- Declare AGY as the owner of automatic native compaction. Manual OpenClaw
+  `/compact` remains unsupported without a native completion acknowledgement.
+
 ## 0.4.2
 
 - Reconnect does not write an auth profile or `agents.defaults.models`. Model
