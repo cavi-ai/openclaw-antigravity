@@ -117,6 +117,9 @@ export async function* executeAntigravityStream(context) {
     let error;
     child.once("error", (value) => { error = value; });
     child.once("close", (code, signal) => {
+      // A tool can ignore SIGTERM and outlive its parent without holding pipes.
+      // Finish cancellation for the whole group before resolving cleanup.
+      if (killTimer && process.platform !== "win32") killTree("SIGKILL");
       closed = true;
       clearTimeout(killTimer);
       resolve({ code, signal, error });
@@ -127,7 +130,7 @@ export async function* executeAntigravityStream(context) {
     if (process.platform === "win32") {
       // Windows has no POSIX process groups; use the OS process-tree terminator.
       const taskkill = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
-      const killer = spawn(taskkill, ["/PID", String(child.pid), "/T", ...(signal === "SIGKILL" ? ["/F"] : [])], {
+      const killer = spawn(taskkill, ["/PID", String(child.pid), "/T", "/F"], {
         stdio: "ignore", windowsHide: true,
       });
       killer.once("error", () => child.kill(signal));

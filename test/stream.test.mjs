@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildAntigravityCliBackend } from "../src/cli-backend.js";
@@ -122,6 +122,33 @@ test("transport terminates native tool descendants holding inherited pipes", asy
   } finally {
     controller.abort();
     await iterator.return();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("cancellation kills a SIGTERM-resistant tool even after its parent closes", async () => {
+  if (process.platform === "win32") return;
+  const root = await mkdtemp(join(tmpdir(), "agy-resistant-tool-"));
+  const marker = join(root, "survived");
+  const controller = new AbortController();
+  const nativeTool = `process.on('SIGTERM',()=>{});process.send('ready');setTimeout(()=>require('node:fs').writeFileSync(${JSON.stringify(marker)},'survived'),300);setTimeout(()=>process.exit(0),2000);`;
+  const parent = `const tool=require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(nativeTool)}],{stdio:['ignore','ignore','ignore','ipc']});tool.on('message',()=>console.log(JSON.stringify({event:'init',conversation_id:String(tool.pid)})));setInterval(()=>{},10000);`;
+  const iterator = buildAntigravityCliBackend().prepareExecution().execute({ command: process.execPath, args: ["-e", parent], cwd: process.cwd(), env: process.env, prompt: "fixture", abortSignal: controller.signal });
+  let toolPid;
+  try {
+    toolPid = Number((await iterator.next()).value.conversation_id);
+    const pending = iterator.next();
+    controller.abort();
+    await assert.rejects(pending, /abort/i);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await assert.rejects(access(marker), { code: "ENOENT" });
+  } finally {
+    controller.abort();
+    await iterator.return();
+    if (toolPid) {
+      try { process.kill(toolPid, "SIGKILL"); }
+      catch (error) { if (error.code !== "ESRCH") throw error; }
+    }
     await rm(root, { recursive: true, force: true });
   }
 });
