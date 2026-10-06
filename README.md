@@ -138,13 +138,13 @@ installed `openclaw` command. It runs `agy models`, starts the working-tree
 plugin in a temporary loopback-only OpenClaw state, activates the projected
 **Reconnect** action, and verifies that credential-only **Connect** is absent.
 The check links the live `agy` session into a temporary home while keeping its
-plugin configuration isolated. The temporary gateway, home, and state are
+plugin configuration isolated. Both integration checks exclude unrelated bundled
+plugins. The temporary gateway, home, and state are
 removed afterward; the installed gateway, OpenClaw config, credentials,
 default model, and pre-existing `agy` plugins are not changed. Set `AGY_BIN` or
 `OPENCLAW_BIN` to use a non-default executable.
 
-The streaming check runs only this plugin, with unrelated bundled plugins
-excluded. It reads a disposable fixture under the isolated agent workspace,
+The streaming check reads a disposable fixture under the isolated agent workspace,
 checks Gateway text deltas and correlated tool events, and sends a follow-up
 turn to check conversation continuity. It uses normal AGY permissions.
 

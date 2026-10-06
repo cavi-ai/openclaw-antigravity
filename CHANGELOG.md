@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Check Reconnect against the host's guided-discovery `prepareOptions` and isolate
+  integration checks from unrelated bundled plugins.
+
 - Stream AGY response text and native tool starts/results through OpenClaw's
   custom JSONL parser. Preserve conversation ids on resume and report usage
   for the current turn rather than counting earlier turns again.

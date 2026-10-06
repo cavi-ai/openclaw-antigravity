@@ -28,23 +28,26 @@ export function assertAgySession(output) {
   return modelIds;
 }
 
-export function assertReconnectProjection(status) {
+export function assertReconnectProjection(status, detection) {
   const capability = status?.providerCapabilities?.find(
     (candidate) => candidate?.provider === PROVIDER_ID,
   );
   if (!capability) {
     fail(`the OpenClaw host did not publish capabilities for ${PROVIDER_ID}`);
   }
-  if (capability.loginOptions?.length) {
+  if (capability.loginOptions?.length || capability.apiKeySupported === true ||
+      capability.quickApiKeySetup === true ||
+      [...(detection?.authOptions ?? []), ...(detection?.manualProviders ?? [])]
+        .some((option) => option?.brandId === PROVIDER_ID)) {
     fail("credential-only Connect is exposed for Antigravity");
   }
-  const reconnect = capability.setupActions?.find(
-    (action) => action?.choiceId === CHOICE_ID && action?.actionLabel === ACTION_LABEL,
+  const reconnect = detection?.prepareOptions?.find(
+    (action) => action?.id === CHOICE_ID && action?.brandId === PROVIDER_ID && action?.actionLabel === ACTION_LABEL,
   );
   if (!reconnect) {
     fail('the Antigravity guided-discovery action is not labeled "Reconnect"');
   }
-  return { choiceId: reconnect.choiceId, actionLabel: reconnect.actionLabel };
+  return { choiceId: reconnect.id, actionLabel: reconnect.actionLabel };
 }
 
 function parseHostVersion(output) {
@@ -183,12 +186,15 @@ async function waitForGateway(openclaw, gatewayUrl, token, env, child, diagnosti
 }
 
 async function stopGateway(child) {
-  if (child.exitCode !== null) return;
-  child.kill("SIGTERM");
-  await Promise.race([
-    new Promise((resolve) => child.once("exit", resolve)),
-    delay(3_000).then(() => child.kill("SIGKILL")),
-  ]);
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const closed = new Promise((resolve) => child.once("close", resolve));
+  const killTimer = setTimeout(() => child.kill("SIGKILL"), 3_000);
+  try {
+    child.kill("SIGTERM");
+    await closed;
+  } finally {
+    clearTimeout(killTimer);
+  }
 }
 
 function boundedDiagnostics(chunks) {
@@ -201,7 +207,7 @@ export async function withTemporaryRoot(run) {
   try {
     return await run(tempRoot);
   } finally {
-    await rm(tempRoot, { recursive: true, force: true });
+    await rm(tempRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 }
 
@@ -233,7 +239,8 @@ export async function runHostIntegrationCheck({
         OPENCLAW_HOME: isolatedHome,
         OPENCLAW_CONFIG_PATH: configPath,
         OPENCLAW_STATE_DIR: stateDir,
-        ...(!checkReconnect ? { OPENCLAW_DISABLE_BUNDLED_PLUGINS: "1" } : {}),
+        // This check exercises only the explicitly loaded Antigravity plugin.
+        OPENCLAW_DISABLE_BUNDLED_PLUGINS: "1",
       };
       const gatewayOutput = [];
       let gateway;
@@ -281,12 +288,7 @@ export async function runHostIntegrationCheck({
 
         await waitForGateway(openclaw, gatewayUrl, gatewayToken, env, gateway, diagnostics);
         if (!checkReconnect) {
-          let runtime;
-          try {
-            runtime = await verifyRuntime({ gatewayUrl, gatewayToken, env, tempRoot });
-          } catch (error) {
-            throw new Error(`${error.message}${diagnostics()}`, { cause: error });
-          }
+          const runtime = await verifyRuntime({ gatewayUrl, gatewayToken, env, tempRoot });
           return {
             pluginVersion: packageJson.version,
             hostVersion: hostVersion.join("."),
@@ -298,12 +300,12 @@ export async function runHostIntegrationCheck({
           buildGatewayCallArgs("models.authStatus", gatewayUrl, gatewayToken),
           { env, timeout: 15_000 },
         );
-        const action = assertReconnectProjection(status);
         const detection = parseJsonOutput(
           openclaw,
           buildGatewayCallArgs("openclaw.setup.detect", gatewayUrl, gatewayToken, 30_000),
           { env, timeout: 35_000 },
         );
+        const action = assertReconnectProjection(status, detection);
         const candidate = findReconnectCandidate(detection);
         const activation = assertReconnectActivation(
           parseJsonOutput(
@@ -330,6 +332,8 @@ export async function runHostIntegrationCheck({
           activation,
           ...(runtime ? { runtime } : {}),
         };
+      } catch (error) {
+        throw new Error(`${error.message}${boundedDiagnostics(gatewayOutput)}`, { cause: error });
       } finally {
         if (gateway) await stopGateway(gateway);
       }

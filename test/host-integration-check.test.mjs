@@ -82,15 +82,10 @@ test("live agy models and guided discovery project only Reconnect", () => {
           provider: "antigravity-cli",
           apiKeySupported: false,
           quickApiKeySetup: false,
-          setupActions: [
-            {
-              choiceId: "antigravity-cli",
-              label: "Antigravity CLI",
-              actionLabel: "Reconnect",
-            },
-          ],
         },
       ],
+    }, {
+      prepareOptions: [{ id: "antigravity-cli", brandId: "antigravity-cli", label: "Antigravity CLI", actionLabel: "Reconnect" }],
     }),
     {
       choiceId: "antigravity-cli",
@@ -106,13 +101,6 @@ test("credential-only Connect exposure fails the host check", () => {
         providerCapabilities: [
           {
             provider: "antigravity-cli",
-            setupActions: [
-              {
-                choiceId: "antigravity-cli",
-                label: "Antigravity CLI",
-                actionLabel: "Reconnect",
-              },
-            ],
             loginOptions: [
               {
                 id: "antigravity/antigravity-cli",
@@ -129,4 +117,23 @@ test("credential-only Connect exposure fails the host check", () => {
 
 test("missing live agy models fails the host check", () => {
   assert.throws(() => assertAgySession("Fetching available models...\n"), /live `agy` session/i);
+});
+
+test("Reconnect requires the guided discovery choice and rejects credential setup routes", () => {
+  const status = { providerCapabilities: [{ provider: "antigravity-cli", apiKeySupported: false, quickApiKeySetup: false }] };
+  const option = { id: "antigravity-cli", brandId: "antigravity-cli", actionLabel: "Reconnect" };
+  for (const detection of [
+    {},
+    { prepareOptions: [{ ...option, actionLabel: "Connect" }] },
+    { prepareOptions: [{ ...option, brandId: "another-provider" }] },
+    { prepareOptions: [{ ...option, id: "another-choice" }] },
+  ]) {
+    assert.throws(() => assertReconnectProjection(status, detection), /not labeled "Reconnect"/);
+  }
+  for (const surface of ["authOptions", "manualProviders"]) {
+    assert.throws(() => assertReconnectProjection(status, {
+      prepareOptions: [option], [surface]: [{ id: "antigravity-cli", brandId: "antigravity-cli" }],
+    }), /credential-only Connect/);
+  }
+  assert.throws(() => assertReconnectProjection({ providerCapabilities: [{ provider: "antigravity-cli", apiKeySupported: true }] }, { prepareOptions: [option] }), /credential-only Connect/);
 });
