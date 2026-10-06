@@ -15,5 +15,12 @@ The general form is `antigravity-cli/<model>`. Reconnect saves the current
 `agy models` list on the provider. It does not add those refs to
 `agents.defaults.models` or to a model allow policy.
 
-Print mode returns the completed JSON response rather than token streaming. It
-accepts text prompts and does not add inline image support.
+Print mode streams response text and native tool starts/results into OpenClaw.
+The final result supplies the conversation id and token usage. A truncated
+stream fails explicitly instead of being accepted as a completed response.
+It accepts text prompts and does not add inline image support.
+
+Antigravity automatically compacts its native conversation when needed. The
+plugin leaves that history with `agy`; it does not run a second summarizer.
+Manual OpenClaw `/compact` is unsupported, and the current AGY event format does
+not expose dedicated compaction status events.

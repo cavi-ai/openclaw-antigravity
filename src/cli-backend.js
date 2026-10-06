@@ -4,14 +4,8 @@
 // inference and auth. agy authenticates itself against the user's Antigravity
 // subscription, so this backend carries no API key and no auth methods.
 //
-// `agy --print --output-format json` emits a single flat object:
-//   {"conversation_id":"…","status":"SUCCESS","response":"…","duration_seconds":…,
-//    "num_turns":1,"usage":{input_tokens,output_tokens,…}}
-// Core's generic JSON reader already takes `response` as the assistant text and
-// `sessionIdFields` for the resume handle, so no stream dialect is needed. agy's
-// `--output-format stream-json` is its own dialect (event/step_update/result) and
-// matches neither claude-stream-json nor gemini-stream-json; adopting it would
-// require a core dialect, so print+json is used instead.
+// AGY's event/step_update/result dialect is translated by the public JSONL hook.
+// The native CLI retains inference, tools, authentication, and compaction ownership.
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, isAbsolute, join } from "node:path";
@@ -20,6 +14,7 @@ import {
   resolveAntigravityEffort,
   resolveAntigravityTransportModelId,
 } from "./models.js";
+import { executeAntigravityStream, parseAntigravityJsonlEvent } from "./stream.js";
 
 export const ANTIGRAVITY_BACKEND_ID = "antigravity-cli";
 export const TOOL_FREE_SETUP_AGENT_ID = "openclaw-antigravity-setup";
@@ -146,7 +141,7 @@ export function resolveAntigravityEffortArgs(baseArgs, thinkingLevel) {
  * @param {{mode?: string, skipPermissions?: boolean}} [options]
  */
 export function buildBaseArgs(options = {}) {
-  const args = ["--print", "{prompt}", "--output-format", "json"];
+  const args = ["--print", "{prompt}", "--output-format", "stream-json"];
   const mode = options.mode ?? DEFAULT_MODE;
   if (mode !== "none") {
     args.push("--mode", mode);
@@ -176,6 +171,10 @@ export function buildAntigravityCliBackend(options = {}) {
       nativeExecutableNames: ["agy", "agy.exe"],
     },
     sideQuestionToolMode: "disabled",
+    nativeToolMode: "always-on",
+    ownsNativeCompaction: true,
+    parseJsonlEvent: parseAntigravityJsonlEvent,
+    prepareExecution: () => ({ execute: executeAntigravityStream }),
     resolveExecutionArgs: ({ baseArgs, executionMode, thinkingLevel, modelId }) => {
       // agy requires `--effort` on models with effort rows, including the
       // setup probe, and rejects it on Claude.
@@ -196,8 +195,8 @@ export function buildAntigravityCliBackend(options = {}) {
       args: [...base],
       // agy resumes by conversation id; there is no separate session concept.
       resumeArgs: [...base, "--conversation", "{sessionId}"],
-      output: "json",
-      resumeOutput: "json",
+      output: "jsonl",
+      resumeOutput: "jsonl",
       input: "arg",
       // agy takes the prompt as an argv value. Very long prompts blow the argv
       // limit, so hand those to stdin instead.

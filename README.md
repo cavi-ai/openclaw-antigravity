@@ -114,7 +114,12 @@ openclaw config set plugins.entries.antigravity.config.command /absolute/path/to
 
 ## Limitations
 
-- Responses are returned after `agy` finishes; token streaming is not available.
+- Responses stream incrementally, with native tool starts and results displayed
+  by OpenClaw. These events describe tools run by `agy`; OpenClaw does not execute
+  them again. Interrupted streams without a terminal result fail explicitly.
+- `agy` owns automatic compaction of its resumable conversation. Manual
+  OpenClaw `/compact` is unsupported for this backend. AGY's current stream does
+  not expose dedicated compaction status events.
 - Inline image input is not supported by `agy --print`.
 - Per-token cost is reported as zero because Antigravity is subscription-backed.
 - Context-window values are conservative because the CLI does not publish per-model limits.
@@ -125,6 +130,7 @@ openclaw config set plugins.entries.antigravity.config.command /absolute/path/to
 npm test          # plugin behaviour
 npm run docs:test # documentation build/verify/release tooling
 npm run check:host-integration # live agy + isolated installed-host Reconnect check
+npm run check:stream-integration # live text/tool events and a resumed turn
 ```
 
 The host-integration check requires a signed-in `agy` session and a compatible
@@ -132,10 +138,15 @@ installed `openclaw` command. It runs `agy models`, starts the working-tree
 plugin in a temporary loopback-only OpenClaw state, activates the projected
 **Reconnect** action, and verifies that credential-only **Connect** is absent.
 The check links the live `agy` session into a temporary home while keeping its
-plugin configuration isolated. The temporary gateway, home, and state are
+plugin configuration isolated. Both integration checks exclude unrelated bundled
+plugins. The temporary gateway, home, and state are
 removed afterward; the installed gateway, OpenClaw config, credentials,
 default model, and pre-existing `agy` plugins are not changed. Set `AGY_BIN` or
 `OPENCLAW_BIN` to use a non-default executable.
+
+The streaming check reads a disposable fixture under the isolated agent workspace,
+checks Gateway text deltas and correlated tool events, and sends a follow-up
+turn to check conversation continuity. It uses normal AGY permissions.
 
 Releasing docs is automated: publish a GitHub Release `vX.Y.Z` (matching
 `package.json`) and the `Publish release documentation` workflow publishes the
