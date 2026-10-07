@@ -3,6 +3,9 @@
 OpenClaw owns orchestration and passes a text prompt to the registered CLI
 backend. `agy` owns inference and authentication, keeps its own conversation
 state, and returns JSON to the plugin. The plugin stores no API key.
+Doctor removes the retired `agy-session` marker, the native-auth marker, and
+auth profiles prefixed `antigravity-cli:`, `antigravity:`, or `agy:`. Another
+`apiKey` value already stored on the provider is left unchanged.
 
 Each turn creates an `agy --print` subprocess. The configured `command` is an
 executable path, not a shell command; use an absolute path and avoid shell

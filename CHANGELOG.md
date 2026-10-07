@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Reconnect names the failing step. Guided prepare reports a CLI older than 1.2.1.
+- Pass listed effort levels through to `agy --effort`, including levels outside low, medium, and high. Claude's thinking profile is off only.
+- On resume, count usage from this turn's response and tool steps. Omit usage when a resumed turn has no per-step usage. Map thinking tokens to `reasoningTokens`.
+- Keep provider CLI guidance off side-question probes. Name OpenClaw as the owner of the MCP servers in that guidance.
+- Document catalog cost as zero unless the Google provider has a positive rate for the same model id.
+- Doctor removes auth profiles for every declared Antigravity prefix. A non-marker apiKey stays.
+
 ## 0.5.0
 
 - Check Reconnect against the host's guided-discovery `prepareOptions` and isolate

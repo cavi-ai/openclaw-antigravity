@@ -15,7 +15,9 @@ It does not write an API key, and it does not copy the Antigravity access
 token, refresh token, or access-token expiry. It does not change the default
 model. The provider exposes no credential environment variables. A stored
 `agy-session` value on `models.providers.antigravity-cli.apiKey` is leftover
-and should be removed; `openclaw doctor --fix` deletes it.
+and should be removed; `openclaw doctor --fix` deletes that marker, the
+native-auth marker, and auth profiles prefixed `antigravity-cli:`,
+`antigravity:`, or `agy:`. A different `apiKey` string is left unchanged.
 Reconnect installs or refreshes the bundled `openclaw-antigravity-tool-free` custom
 agent. OpenClaw uses that isolated agent only for its connection probe; normal
 provider turns keep the configured `agy` mode and tool behavior.

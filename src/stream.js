@@ -16,16 +16,31 @@ function decode(line) {
   return value;
 }
 
+const USAGE_FIELDS = [
+  ["input_tokens", "input"],
+  ["output_tokens", "output"],
+  ["thinking_tokens", "reasoningTokens"],
+  ["cache_read_tokens", "cacheRead"],
+  ["total_tokens", "total"],
+];
+
 function usageFrom(value) {
   if (!record(value)) return undefined;
   const usage = {};
-  for (const [source, target] of [
-    ["input_tokens", "input"],
-    ["output_tokens", "output"],
-    ["cache_read_tokens", "cacheRead"],
-    ["total_tokens", "total"],
-  ]) {
+  for (const [source, target] of USAGE_FIELDS) {
     if (Number.isFinite(value[source]) && value[source] >= 0) usage[target] = value[source];
+  }
+  return Object.keys(usage).length ? usage : undefined;
+}
+
+function summedStepUsage(steps) {
+  const usage = {};
+  for (const stepUsage of steps) {
+    for (const [source] of USAGE_FIELDS) {
+      if (Number.isFinite(stepUsage[source]) && stepUsage[source] >= 0) {
+        usage[source] = (usage[source] ?? 0) + stepUsage[source];
+      }
+    }
   }
   return Object.keys(usage).length ? usage : undefined;
 }
@@ -94,7 +109,7 @@ export async function* executeAntigravityStream(context) {
   const args = [...context.args];
   const printIndex = args.indexOf("--print");
   const prompt = [
-    !context.useResume && context.systemPrompt,
+    context.executionMode !== "side-question" && !context.useResume && context.systemPrompt,
     context.promptContext?.prependContext,
     context.prompt,
     context.promptContext?.appendContext,
@@ -160,7 +175,8 @@ export async function* executeAntigravityStream(context) {
     if (terminal) throw new Error("AGY emitted another record after its terminal result.");
     const value = decode(line);
     const step = value.step_update;
-    if (value.event === "step_update" && record(step) && step.step_type === "agent_response" &&
+    if (value.event === "step_update" && record(step) &&
+        (step.step_type === "agent_response" || step.step_type === "tool") &&
         step.state === "DONE" && Number.isSafeInteger(step.step_index) && record(step.usage)) {
       responseUsage.set(step.step_index, step.usage);
     }
@@ -168,16 +184,12 @@ export async function* executeAntigravityStream(context) {
       const outcome = terminalResult(value.result);
       terminal = true;
       // AGY reports cumulative conversation usage on resume; the host accounts per run.
-      if (responseUsage.size) {
-        const usage = {};
-        for (const stepUsage of responseUsage.values()) {
-          for (const key of ["input_tokens", "output_tokens", "thinking_tokens", "cache_read_tokens", "total_tokens"]) {
-            if (Number.isFinite(stepUsage[key]) && stepUsage[key] >= 0) {
-              usage[key] = (usage[key] ?? 0) + stepUsage[key];
-            }
-          }
-        }
-        if (Object.keys(usage).length) value.result = { ...value.result, usage };
+      // Step usage is this turn. A resumed turn with none omits the cumulative total.
+      const summed = summedStepUsage(responseUsage.values());
+      if (summed) value.result = { ...value.result, usage: summed };
+      else if (context.useResume && record(value.result)) {
+        const { usage: _usage, ...rest } = value.result;
+        value.result = rest;
       }
       // The plugin-execute contract uses these fields to recognize terminal outcomes.
       return { ...value, type: "result", is_error: Boolean(outcome.errorText) };

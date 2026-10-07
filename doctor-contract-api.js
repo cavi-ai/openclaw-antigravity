@@ -16,8 +16,9 @@ export const sessionRouteStateOwners = [
 ];
 
 function isAntigravityAuthProfile(profileId, profile) {
+  const prefixes = sessionRouteStateOwners.flatMap((owner) => owner.authProfilePrefixes);
   return (
-    profileId.startsWith(`${ANTIGRAVITY_PROVIDER_ID}:`) ||
+    prefixes.some((prefix) => profileId.startsWith(prefix)) ||
     profile?.provider === ANTIGRAVITY_PROVIDER_ID
   );
 }

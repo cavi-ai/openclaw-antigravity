@@ -16,12 +16,13 @@ the plugin. Claude Opus is the exception: `agy` only accepts
 Thinking is the OpenClaw thinking param, not part of the model id. It is
 passed as `agy --effort`, limited to the levels `agy models` lists for the
 model: `low`, `medium`, `high` for Gemini Flash; `low`, `high` for Gemini 3.1
-Pro; `medium` for GPT-OSS. `agy` requires the flag on those models, so `off`
+Pro; `medium` for GPT-OSS. A level outside that snapshot is passed through
+when the live `agy models` listing includes it. `agy` requires the flag on those models, so `off`
 sends the lowest listed level and an unlisted level sends the nearest one.
 Claude models reject `--effort`, so the flag is omitted.
 
 Catalog context-window values are conservative budgeting floors because the
 CLI does not publish per-model limits through this plugin boundary. Reported
-per-token cost is zero because the backend uses a subscription rather than an
-API token-billing contract; it is not a claim that the subscription itself is
-free.
+per-token cost stays zero unless the Google provider catalog has a positive
+rate for that same model id. `agy models` does not supply a rate. A zero cost
+is not a claim that the subscription itself is free.

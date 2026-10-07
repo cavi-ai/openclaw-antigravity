@@ -36,7 +36,7 @@ export const ANTIGRAVITY_PROVIDER_ID = ANTIGRAVITY_BACKEND_ID;
 const ANTIGRAVITY_OPENCLAW_CONTEXT = [
   "You are running through OpenClaw's Antigravity CLI model provider.",
   "Use the installed `openclaw` CLI for OpenClaw operations and check its help before assuming command syntax.",
-  "Use `mcporter` for external MCP servers it manages and check its help before assuming command syntax.",
+  "Use `mcporter` for external MCP servers that OpenClaw manages and check its help before assuming command syntax.",
   "Do not change global OpenClaw or mcporter configuration unless the user explicitly asks.",
 ].join(" ");
 
@@ -60,8 +60,8 @@ const TOOL_FREE_SETUP_PLUGIN_ROOT = join(
 
 const MISSING_AUTH_MESSAGE =
   "Antigravity CLI is not ready. Install Google's Antigravity CLI (`agy`), sign in with your Google subscription, then confirm with `agy models`. This provider stores no API key in OpenClaw.";
-const RECONNECT_ERROR_MESSAGE =
-  "Antigravity CLI could not list models. Run `agy` in a terminal to sign in, then choose Reconnect again. OpenClaw stores no Antigravity credential.";
+const TOOL_FREE_AGENT_VERSION_MESSAGE =
+  "Antigravity CLI 1.2.1 or newer is required for tool-free setup checks.";
 
 function describeCommandFailure(error) {
   if (!error || typeof error !== "object") {
@@ -81,8 +81,8 @@ function describeCommandFailure(error) {
   return first ? first.trim().slice(0, 300) : "agy failed.";
 }
 
-function reconnectFailure(error) {
-  return new Error(`${RECONNECT_ERROR_MESSAGE} (${describeCommandFailure(error)})`);
+function reconnectStepFailure(step, error) {
+  return new Error(`Antigravity reconnect could not ${step}. (${describeCommandFailure(error)})`);
 }
 
 async function runCommand(command, args, context = {}) {
@@ -144,12 +144,16 @@ export const ANTIGRAVITY_THINKING_PROFILE = {
 
 /**
  * Thinking levels OpenClaw offers for a model: the `agy --effort` levels it
- * lists, with no `off`. Claude and unknown models keep the generic profile.
+ * lists, with no `off`. Models that reject the flag offer only `off`.
+ * Unknown models keep the generic profile.
  */
 export function antigravityThinkingProfile(modelId) {
   const levels = antigravityEffortLevels(modelId);
-  if (!levels?.length) {
+  if (!levels) {
     return ANTIGRAVITY_THINKING_PROFILE;
+  }
+  if (levels.length === 0) {
+    return { levels: [{ id: "off" }], defaultLevel: "off" };
   }
   return {
     levels: levels.map((id) => ({ id })),
@@ -183,11 +187,27 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
 
   const installToolFreeSetupAgent = async (context) => {
     throwIfAborted(context.signal);
-    const version = await execute(command, ["--version"], context);
-    if (!supportsToolFreeSetupAgent(version)) {
-      throw new Error("Antigravity CLI 1.2.1 or newer is required for tool-free setup checks.");
+    let version;
+    try {
+      version = await execute(command, ["--version"], context);
+    } catch (error) {
+      if (isAbortError(error, context.signal)) {
+        throw error;
+      }
+      throw reconnectStepFailure("check the Antigravity CLI version", error);
     }
-    await execute(command, ["plugin", "install", TOOL_FREE_SETUP_PLUGIN_ROOT], context);
+    throwIfAborted(context.signal);
+    if (!supportsToolFreeSetupAgent(version)) {
+      throw new Error(TOOL_FREE_AGENT_VERSION_MESSAGE);
+    }
+    try {
+      await execute(command, ["plugin", "install", TOOL_FREE_SETUP_PLUGIN_ROOT], context);
+    } catch (error) {
+      if (isAbortError(error, context.signal)) {
+        throw error;
+      }
+      throw reconnectStepFailure("install the tool-free setup agent", error);
+    }
     throwIfAborted(context.signal);
   };
 
@@ -292,29 +312,23 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
             const modelId = openClawModelId(
               context.modelRef.slice(prefix.length).replace(/-thinking$/u, ""),
             );
+            await installToolFreeSetupAgent(context);
+            let available;
             try {
-              await installToolFreeSetupAgent(context);
-              const available = await listModels({ ...context, refresh: true });
-              return available.includes(modelId)
-                ? validatedResult(`${prefix}${modelId}`, context.config, available)
-                : null;
+              available = await listModels({ ...context, refresh: true });
             } catch (error) {
               if (isAbortError(error, context.signal)) {
                 throw error;
               }
-              return null;
+              throw reconnectStepFailure("list models", error);
             }
+            return available.includes(modelId)
+              ? validatedResult(`${prefix}${modelId}`, context.config, available)
+              : null;
           },
         },
         run: async (context) => {
-          try {
-            await installToolFreeSetupAgent(context);
-          } catch (error) {
-            if (isAbortError(error, context.signal)) {
-              throw error;
-            }
-            throw reconnectFailure(error);
-          }
+          await installToolFreeSetupAgent(context);
           let modelIds;
           try {
             modelIds = await listModels({ ...context, refresh: true });
@@ -322,11 +336,11 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
             if (isAbortError(error, context.signal)) {
               throw error;
             }
-            throw reconnectFailure(error);
+            throw reconnectStepFailure("list models", error);
           }
           const modelId = chooseDetectedModel(modelIds);
           if (!modelId) {
-            throw reconnectFailure(new Error("agy listed no models."));
+            throw reconnectStepFailure("list models", new Error("agy listed no models."));
           }
           return validatedResult(
             `${ANTIGRAVITY_PROVIDER_ID}/${modelId}`,

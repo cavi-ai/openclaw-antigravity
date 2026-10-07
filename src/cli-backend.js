@@ -11,6 +11,7 @@ import { homedir } from "node:os";
 import { delimiter, isAbsolute, join } from "node:path";
 import {
   ANTIGRAVITY_MODEL_ALIASES,
+  isAntigravityEffortLevel,
   resolveAntigravityEffort,
   resolveAntigravityTransportModelId,
 } from "./models.js";
@@ -94,7 +95,6 @@ export function buildAntigravityCommandEnv(env = process.env) {
 export const DEFAULT_MODE = "accept-edits";
 
 const EFFORT_ARG = "--effort";
-const EFFORT_LEVELS = new Set(["low", "medium", "high"]);
 
 function stripEffortArgs(args) {
   const normalized = [];
@@ -120,8 +120,8 @@ function stripEffortArgs(args) {
 }
 
 /**
- * Replaces any `--effort` in args with the given level.
- * Unset and values outside low|medium|high omit the flag.
+ * Replaces any `--effort` in args with a resolved effort level.
+ * Unset, `off`, and values that are not effort levels omit the flag.
  *
  * @param {readonly string[]} baseArgs
  * @param {string | null | undefined} thinkingLevel
@@ -129,7 +129,7 @@ function stripEffortArgs(args) {
 export function resolveAntigravityEffortArgs(baseArgs, thinkingLevel) {
   const level = typeof thinkingLevel === "string" ? thinkingLevel.trim().toLowerCase() : "";
   const args = stripEffortArgs(baseArgs);
-  if (!EFFORT_LEVELS.has(level)) {
+  if (!isAntigravityEffortLevel(level)) {
     return args;
   }
   return [...args, EFFORT_ARG, level];
