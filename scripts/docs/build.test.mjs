@@ -4,10 +4,11 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { DOCUMENTED_VERSION } from "./lib.mjs";
 
 const IDENTITY = {
-  version: "0.4.2",
-  tag: "v0.4.2",
+  version: DOCUMENTED_VERSION,
+  tag: `v${DOCUMENTED_VERSION}`,
   commit: "0123456789abcdef0123456789abcdef01234567",
   sourceDateEpoch: 1700000000,
 };
@@ -49,11 +50,11 @@ test("build output is complete, stamped, and byte reproducible", async (context)
     schemaVersion: 2,
     package: "@cavi-ai/antigravity",
     product: "antigravity",
-    version: "0.4.2",
+    version: IDENTITY.version,
     contentSha256: await digest(first, true),
-    publicBasePath: "/docs/antigravity/v0.4.2",
+    publicBasePath: `/docs/antigravity/${IDENTITY.tag}`,
     stableAlias: "/docs/antigravity",
-    release: { tag: "v0.4.2", commit: IDENTITY.commit },
+    release: { tag: IDENTITY.tag, commit: IDENTITY.commit },
     generatedAt: "2023-11-14T22:13:20.000Z",
   });
   await verifyDocumentation({ ...IDENTITY, docsRoot: first });
@@ -69,7 +70,7 @@ test("build and verification reject inconsistent identity or changed output", as
   const { verifyDocumentation } = await import("./verify.mjs");
   await assert.rejects(
     buildDocumentation({ ...IDENTITY, version: "0.1.1", outputRoot: temporary }),
-    /release version must be 0\.4\.2/u,
+    { message: `release version must be ${IDENTITY.version}` },
   );
   const output = path.join(temporary, "built");
   await buildDocumentation({ ...IDENTITY, outputRoot: output });
