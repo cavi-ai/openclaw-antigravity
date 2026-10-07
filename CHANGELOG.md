@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0
+
 - Check Reconnect against the host's guided-discovery `prepareOptions` and isolate
   integration checks from unrelated bundled plugins.
 
