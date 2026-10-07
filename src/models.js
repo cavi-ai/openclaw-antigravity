@@ -29,7 +29,11 @@ const ANTIGRAVITY_MODEL_EFFORTS = {
   "gpt-oss-120b": ["medium"],
 };
 
-let liveModelEfforts = null;
+export function createAntigravityEffortStore() {
+  return { live: null };
+}
+
+const defaultEffortStore = createAntigravityEffortStore();
 
 /**
  * agy ids that are not the OpenClaw id. Claude Opus is only recognized as
@@ -60,8 +64,14 @@ export const ANTIGRAVITY_DEFAULT_MODEL = "gemini-3.1-pro";
  */
 export const ANTIGRAVITY_BASE_URL = "http://127.0.0.1/antigravity-cli";
 
-/** Adapter recorded on catalog rows. Unused at runtime for the same reason. */
-export const ANTIGRAVITY_MODEL_API = "openai-completions";
+/**
+ * Schema adapter recorded on catalog rows. OpenClaw requires `baseUrl` and an
+ * api from its model enum. `openai-completions` is an HTTP transport and is
+ * probed on loopback; `pi-messages` is accepted and has no HTTP transport.
+ * agy remains the runtime.
+ */
+export const ANTIGRAVITY_MODEL_API = "pi-messages";
+export const RETIRED_ANTIGRAVITY_MODEL_API = "openai-completions";
 
 /**
  * Short names for the ids above. `agy` itself accepts only the full id, so these
@@ -110,7 +120,11 @@ export function antigravityModelSupportsEffort(modelId) {
   return !openClawModelId(modelId).startsWith("claude-");
 }
 
-/** Maps raw `agy models` ids to the effort levels each OpenClaw id accepts. */
+/**
+ * Maps raw `agy models` ids to the effort levels each OpenClaw id accepts.
+ * A bare effort-capable id does not enter the map, so the snapshot stays.
+ * Claude rows record an empty list, which omits `--effort`.
+ */
 export function effortLevelsFromAgyIds(agyIds) {
   const efforts = {};
   for (const raw of agyIds ?? []) {
@@ -119,48 +133,60 @@ export function effortLevelsFromAgyIds(agyIds) {
     if (!id) {
       continue;
     }
-    const levels = efforts[id] ?? [];
     const level = agyId.slice(id.length + 1);
-    if (isAntigravityEffortLevel(level) && !levels.includes(level)) {
-      levels.push(level);
+    if (isAntigravityEffortLevel(level)) {
+      const levels = efforts[id] ?? [];
+      if (!levels.includes(level)) {
+        levels.push(level);
+      }
+      efforts[id] = levels.sort((a, b) => EFFORT_RANK[a] - EFFORT_RANK[b]);
+      continue;
     }
-    efforts[id] = levels.sort((a, b) => EFFORT_RANK[a] - EFFORT_RANK[b]);
+    if (!antigravityModelSupportsEffort(id) && !Object.hasOwn(efforts, id)) {
+      efforts[id] = [];
+    }
   }
   return efforts;
 }
 
 /** Records the effort levels from the latest `agy models` listing. */
-export function recordAntigravityModelEfforts(agyIds) {
+export function recordAntigravityModelEfforts(agyIds, store = defaultEffortStore) {
   const efforts = effortLevelsFromAgyIds(agyIds);
-  liveModelEfforts = Object.keys(efforts).length > 0 ? efforts : null;
+  store.live = Object.keys(efforts).length > 0 ? efforts : null;
 }
 
 /**
  * `--effort` levels agy accepts for a model: live listing, then the snapshot.
  * `[]` means the flag is rejected; `undefined` means the model is unknown.
  */
-export function antigravityEffortLevels(modelId) {
+export function antigravityEffortLevels(modelId, store = defaultEffortStore) {
   const id = openClawModelId(String(modelId ?? "").replace(/-thinking$/u, ""));
-  return liveModelEfforts?.[id] ?? ANTIGRAVITY_MODEL_EFFORTS[id];
+  return store.live?.[id] ?? ANTIGRAVITY_MODEL_EFFORTS[id];
 }
 
-/** Effort used when OpenClaw sends no level: medium, else the highest listed. */
+/** True when the thinking profile has a level other than off. Unknown models stay on. */
+export function antigravityModelReasons(modelId, store = defaultEffortStore) {
+  const levels = antigravityEffortLevels(modelId, store);
+  return levels ? levels.length > 0 : true;
+}
+
+/** Effort used when OpenClaw sends no level: medium, else the lowest listed. */
 export function defaultAntigravityEffort(levels) {
-  return levels.includes("medium") ? "medium" : levels.at(-1);
+  return levels.includes("medium") ? "medium" : levels[0];
 }
 
 /**
  * Maps an OpenClaw thinking level to an `agy --effort` value the model accepts,
  * or `undefined` to omit the flag. `off` takes the lowest listed level because
  * agy has no off for models with effort rows. Other levels take the nearest
- * listed level; ties go up.
+ * listed level; ties keep the lower one.
  *
  * @param {string | undefined} modelId
  * @param {string | null | undefined} thinkingLevel
  */
-export function resolveAntigravityEffort(modelId, thinkingLevel) {
+export function resolveAntigravityEffort(modelId, thinkingLevel, store = defaultEffortStore) {
   const level = typeof thinkingLevel === "string" ? thinkingLevel.trim().toLowerCase() : "";
-  const levels = antigravityEffortLevels(modelId);
+  const levels = antigravityEffortLevels(modelId, store);
   if (!levels) {
     return antigravityModelSupportsEffort(modelId) && ["low", "medium", "high"].includes(level)
       ? level
@@ -181,7 +207,7 @@ export function resolveAntigravityEffort(modelId, thinkingLevel) {
   }
   let nearest = levels[0];
   for (const candidate of levels) {
-    if (Math.abs(EFFORT_RANK[candidate] - rank) <= Math.abs(EFFORT_RANK[nearest] - rank)) {
+    if (Math.abs(EFFORT_RANK[candidate] - rank) < Math.abs(EFFORT_RANK[nearest] - rank)) {
       nearest = candidate;
     }
   }
@@ -281,7 +307,7 @@ export function catalogEntryForModelId(modelId, options = {}) {
     api: ANTIGRAVITY_MODEL_API,
     // Capability flag only. The selected thinking level is a separate param
     // mapped to `agy --effort`, not a suffix of this id.
-    reasoning: true,
+    reasoning: antigravityModelReasons(modelId, options.effortStore),
     input: ["text"],
     contextWindow: contextWindowFor(modelId),
     maxTokens: 64_000,
@@ -301,6 +327,7 @@ export function buildAntigravityModelCatalog(modelIds = ANTIGRAVITY_MODEL_IDS, o
     catalogEntryForModelId(modelId, {
       cost: options.costs?.[modelId],
       googleModels: options.googleModels,
+      effortStore: options.effortStore,
     }),
   );
 }

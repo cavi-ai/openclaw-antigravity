@@ -11,11 +11,13 @@ Version {{PRODUCT_VERSION}} declares these OpenClaw boundaries from
 | minimum Gateway | `{{OPENCLAW_MIN_GATEWAY_VERSION}}` |
 
 The package-root doctor contract associates `antigravity-cli`, `antigravity`,
-and `agy` session-route identifiers with this plugin. Repair removes auth
-profiles with those prefixes. It also removes the retired `agy-session` marker
-and the native-auth marker. Another `apiKey` value on the provider is left in
-place. When the provider is registered, doctor can name it while diagnosing a
-missing executable or an unavailable CLI login.
+and `agy` session-route identifiers with this plugin. Repair removes
+`antigravity-cli` auth profiles, plus leftover `antigravity:` and `agy:`
+profiles that do not name another provider. It also removes the retired
+`agy-session` marker and the native-auth marker, and rewrites a stored
+`openai-completions` catalog api to `pi-messages`. Another `apiKey` value on
+the provider is left in place. When the provider is registered, doctor can
+name it while diagnosing a missing executable or an unavailable CLI login.
 
 Doctor runs after discovery. If the plugin is absent from the plugin list,
 doctor cannot repair discovery: fix installation, enablement, and Gateway

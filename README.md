@@ -43,16 +43,18 @@ writes the `agy models` rows onto the provider. The login stays in `agy`. The
 plugin does not write an API key, and it does not copy the Antigravity access
 token, refresh token, or access-token expiry. It does not change the default
 model.
-Reconnect installs
-or refreshes the bundled `openclaw-antigravity-tool-free` custom agent, which
-OpenClaw uses only for its connection probe. Normal provider turns keep the
-configured `agy` mode and tool behavior.
+Reconnect installs or refreshes the bundled `openclaw-antigravity-tool-free`
+agy plugin. Its agent id is `openclaw-antigravity-setup`, which OpenClaw uses
+only for its connection probe. Normal provider turns keep the configured `agy`
+mode and tool behavior.
 
 Thinking level is a separate param and is passed as `agy --effort`, limited
 to the levels `agy models` lists for that model: `low`/`medium`/`high` for
 Gemini Flash, `low`/`high` for Gemini 3.1 Pro, `medium` for GPT-OSS. `agy`
-requires the flag on those models, so `off` sends the lowest listed level and
-an unlisted level sends the nearest one. Claude models reject `--effort`, so
+requires the flag on those models, so `off` sends the lowest listed level.
+An unlisted level sends the nearest listed level, and a tie sends the lower
+one. When no level is selected, the default is `medium` if that model lists
+it, otherwise the lowest listed level. Claude models reject `--effort`, so
 the flag is omitted for them.
 
 ## Use

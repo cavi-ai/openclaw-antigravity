@@ -18,9 +18,10 @@ model. The provider exposes no credential environment variables. A stored
 and should be removed; `openclaw doctor --fix` deletes that marker, the
 native-auth marker, and auth profiles prefixed `antigravity-cli:`,
 `antigravity:`, or `agy:`. A different `apiKey` string is left unchanged.
-Reconnect installs or refreshes the bundled `openclaw-antigravity-tool-free` custom
-agent. OpenClaw uses that isolated agent only for its connection probe; normal
-provider turns keep the configured `agy` mode and tool behavior.
+Reconnect installs or refreshes the bundled `openclaw-antigravity-tool-free` agy
+plugin. Its agent id is `openclaw-antigravity-setup`. OpenClaw uses that agent
+only for its connection probe; normal provider turns keep the configured `agy`
+mode and tool behavior.
 
 Complete first-run setup with another inference provider when possible, then
 reconnect Antigravity from **Models → Providers**. Models-page reconnect

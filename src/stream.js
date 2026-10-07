@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 const MAX_LINE_CHARS = 1_048_576;
 const STDERR_TAIL_CHARS = 16_384;
+export const MAX_PROMPT_ARG_CHARS = 96_000;
 
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -109,7 +110,7 @@ export async function* executeAntigravityStream(context) {
   const args = [...context.args];
   const printIndex = args.indexOf("--print");
   const prompt = [
-    context.executionMode !== "side-question" && !context.useResume && context.systemPrompt,
+    context.executionMode !== "side-question" && context.systemPrompt,
     context.promptContext?.prependContext,
     context.prompt,
     context.promptContext?.appendContext,
@@ -117,7 +118,7 @@ export async function* executeAntigravityStream(context) {
   let usesStdin = false;
   if (printIndex >= 0) {
     const hasArgPrompt = args[printIndex + 1] !== "--output-format" && args[printIndex + 1] !== undefined;
-    usesStdin = prompt.length > 96_000;
+    usesStdin = prompt.length > MAX_PROMPT_ARG_CHARS;
     args.splice(printIndex + 1, hasArgPrompt ? 1 : 0, ...(usesStdin ? [] : [prompt]));
   }
   const child = spawn(context.command, args, {
@@ -217,7 +218,10 @@ export async function* executeAntigravityStream(context) {
     if (result.code !== 0) {
       throw new Error(`AGY exited with code ${result.code ?? result.signal}${stderr.trim() ? `: ${stderr.trim()}` : "."}`);
     }
-    if (!terminal) throw new Error("AGY stream ended without a terminal result.");
+    if (!terminal) {
+      const detail = stderr.trim();
+      throw new Error(`AGY stream ended without a terminal result${detail ? `: ${detail}` : "."}`);
+    }
   } finally {
     context.abortSignal?.removeEventListener("abort", terminate);
     terminate();

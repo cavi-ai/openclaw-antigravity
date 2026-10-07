@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- A failed `agy models` call does not publish the static snapshot as a live catalog.
+- Keep stderr when a zero exit has no terminal result. Command errors include later output lines.
+- Resolve `agy` and prepend `~/.local/bin` on each turn.
+- Send provider guidance on resumed turns. Side questions still omit it.
+- Name the probe agent `openclaw-antigravity-setup`. The agy plugin package remains `openclaw-antigravity-tool-free`.
+- Keep the effort snapshot when a live model row has no effort suffix. Effort state is per provider registration.
+- Unlisted thinking levels tie toward the lower level. The unset default is medium, otherwise the lowest listed level.
+- Share one prompt-size cutoff between argv and stdin.
+- Record catalog api `pi-messages`. Doctor rewrites a stored `openai-completions` value. Claude rows set reasoning off.
+- Doctor keeps auth profiles that name another provider.
 - Reconnect names the failing step. Guided prepare reports a CLI older than 1.2.1.
 - Pass listed effort levels through to `agy --effort`, including levels outside low, medium, and high. Claude's thinking profile is off only.
 - On resume, count usage from this turn's response and tool steps. Omit usage when a resumed turn has no per-step usage. Map thinking tokens to `reasoningTokens`.
