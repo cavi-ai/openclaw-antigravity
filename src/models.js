@@ -6,8 +6,13 @@
 // agy as `claude-opus-4-6-thinking`. Reconnect writes these rows into the
 // provider config.
 
-const EFFORT_SUFFIX = /-(?:high|medium|low)$/u;
 const EFFORT_RANK = { minimal: 1, low: 1, medium: 2, high: 3, xhigh: 3, max: 3 };
+const EFFORT_SUFFIX = new RegExp(`-(?:${Object.keys(EFFORT_RANK).join("|")})$`, "u");
+
+/** True for an effort token this plugin can pass to `agy --effort`. */
+export function isAntigravityEffortLevel(level) {
+  return typeof level === "string" && Object.hasOwn(EFFORT_RANK, level);
+}
 
 /**
  * `--effort` levels each model accepts, from `agy models` on agy 1.2.8. agy
@@ -116,7 +121,7 @@ export function effortLevelsFromAgyIds(agyIds) {
     }
     const levels = efforts[id] ?? [];
     const level = agyId.slice(id.length + 1);
-    if (level && !levels.includes(level)) {
+    if (isAntigravityEffortLevel(level) && !levels.includes(level)) {
       levels.push(level);
     }
     efforts[id] = levels.sort((a, b) => EFFORT_RANK[a] - EFFORT_RANK[b]);

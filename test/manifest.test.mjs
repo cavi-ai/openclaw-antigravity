@@ -118,6 +118,8 @@ test("doctor repair drops Antigravity auth bindings and leaves other providers",
         profiles: {
           "antigravity-cli:default": { provider: "antigravity-cli", mode: "oauth" },
           "antigravity-cli:agy": { provider: "antigravity-cli", mode: "token" },
+          "antigravity:legacy": { mode: "oauth" },
+          "agy:legacy": { mode: "token" },
           "ollama:default": { provider: "ollama", mode: "api_key" },
         },
         order: {

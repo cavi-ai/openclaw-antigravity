@@ -156,7 +156,11 @@ test("thinking level maps to agy --effort and is omitted when off or unset", () 
     "--output-format",
     "json",
   ]);
-  assert.deepEqual(resolveAntigravityEffortArgs(["--print", "--effort=high"], "xhigh"), ["--print"]);
+  assert.deepEqual(resolveAntigravityEffortArgs(["--print", "--effort=high"], "xhigh"), [
+    "--print",
+    "--effort",
+    "xhigh",
+  ]);
 });
 
 test("resolveModelId strips effort and sends opus as the agy id", () => {
@@ -228,6 +232,30 @@ test("thinking level maps to an --effort the model lists", () => {
   ];
   for (const [modelId, level, expected] of cases) {
     assert.equal(resolveAntigravityEffort(modelId, level), expected, `${modelId} × ${level}`);
+  }
+});
+
+test("a listed effort outside low medium high reaches agy", () => {
+  recordAntigravityModelEfforts(["gemini-3.1-pro-xhigh", "gemini-3.1-pro-low"]);
+  try {
+    const backend = buildAntigravityCliBackend();
+    assert.deepEqual(antigravityThinkingProfile("gemini-3.1-pro"), {
+      levels: [{ id: "low" }, { id: "xhigh" }],
+      defaultLevel: "xhigh",
+    });
+    assert.equal(resolveAntigravityEffort("gemini-3.1-pro", "xhigh"), "xhigh");
+    assert.equal(backend.resolveModelId({ modelId: "gemini-3.1-pro-xhigh" }), "gemini-3.1-pro");
+    assert.deepEqual(
+      backend.resolveExecutionArgs({
+        baseArgs: ["--print", "{prompt}"],
+        executionMode: "agent",
+        thinkingLevel: "xhigh",
+        modelId: "gemini-3.1-pro",
+      }),
+      ["--print", "{prompt}", "--effort", "xhigh"],
+    );
+  } finally {
+    recordAntigravityModelEfforts([]);
   }
 });
 
@@ -500,15 +528,16 @@ test("guided reconnect rejects agy versions without tool-free custom agents", as
     },
   );
 
-  assert.equal(
-    await provider.auth[0].appGuidedSetup.prepare({
+  await assert.rejects(
+    provider.auth[0].appGuidedSetup.prepare({
       config: {},
       env: {},
       modelRef: "antigravity-cli/gemini-3.1-pro-high",
     }),
-    null,
+    /1\.2\.1 or newer/,
   );
-  assert.deepEqual(calls, [["--version"]]);
+  await assert.rejects(provider.auth[0].run({ config: {}, env: {} }), /1\.2\.1 or newer/);
+  assert.deepEqual(calls, [["--version"], ["--version"]]);
 });
 
 test("guided reconnect reports unavailable agy without inventing a credential", async () => {
@@ -525,9 +554,34 @@ test("guided reconnect reports unavailable agy without inventing a credential", 
   assert.equal(await provider.auth[0].appGuidedSetup.detect(context), null);
   assert.equal(await provider.auth[0].appGuidedSetup.detectAvailability(context), false);
   await assert.rejects(
-    provider.auth[0].run(context),
-    /agy was not found|Run `agy` in a terminal to sign in, then choose Reconnect again/,
+    provider.auth[0].appGuidedSetup.prepare({
+      ...context,
+      modelRef: "antigravity-cli/gemini-3.1-pro",
+    }),
+    /could not check the Antigravity CLI version/,
   );
+  await assert.rejects(
+    provider.auth[0].run(context),
+    /could not check the Antigravity CLI version/,
+  );
+});
+
+test("reconnect names a model-list failure separately from setup", async () => {
+  const provider = buildAntigravityProvider(
+    {},
+    sessionDeps(async (_command, args) => {
+      if (args[0] === "--version") return "1.2.3\n";
+      if (args[0] === "plugin") return "";
+      throw new Error("models unavailable");
+    }),
+  );
+  const context = {
+    config: {},
+    env: {},
+    modelRef: "antigravity-cli/gemini-3.1-pro",
+  };
+  await assert.rejects(provider.auth[0].run({ config: {}, env: {} }), /could not list models.*models unavailable/);
+  await assert.rejects(provider.auth[0].appGuidedSetup.prepare(context), /could not list models.*models unavailable/);
 });
 
 test("guided reconnect propagates cancellation", async () => {
@@ -686,7 +740,10 @@ test("thinking profile offers only the effort levels agy lists for the model", (
     levels: [{ id: "medium" }],
     defaultLevel: "medium",
   });
-  assert.equal(profile("claude-sonnet-4-6"), ANTIGRAVITY_THINKING_PROFILE);
+  assert.deepEqual(profile("claude-sonnet-4-6"), {
+    levels: [{ id: "off" }],
+    defaultLevel: "off",
+  });
   assert.equal(antigravityThinkingProfile("gemini-4-pro"), ANTIGRAVITY_THINKING_PROFILE);
   assert.equal(buildAntigravityProvider().resolveThinkingProfile(), ANTIGRAVITY_THINKING_PROFILE);
 });
@@ -825,7 +882,7 @@ test("provider guidance is the SDK system-prompt contribution", () => {
     modelId: "gemini-3.1-pro",
   });
   assert.match(guidance.stablePrefix, /openclaw/);
-  assert.match(guidance.stablePrefix, /mcporter/);
+  assert.match(guidance.stablePrefix, /MCP servers that OpenClaw manages/);
   assert.equal(guidance.dynamicSuffix, undefined);
   assert.equal(
     provider.resolveSystemPromptContribution({ provider: "other-provider", modelId: "x" }),

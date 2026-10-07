@@ -73,6 +73,10 @@ test("transport preserves initial system guidance and per-turn context without r
   const extra = { args: ["-e", script, "--", "--print", "original", "--output-format", "stream-json"], systemPrompt: "system guidance", prompt: "--user request", promptContext: { prependContext: "before", appendContext: "after" } };
   assert.equal((await collect(script, extra))[0].result.response, "system guidance\n\nbefore\n\n--user request\n\nafter");
   assert.equal((await collect(script, { ...extra, useResume: true }))[0].result.response, "before\n\n--user request\n\nafter");
+  assert.equal(
+    (await collect(script, { ...extra, executionMode: "side-question" }))[0].result.response,
+    "before\n\n--user request\n\nafter",
+  );
 });
 
 test("transport sends oversized composed prompts through stdin and reports spawn failures", async () => {
@@ -87,6 +91,24 @@ test("resumed usage counts the current response steps once rather than the whole
   const final = { event: "result", result: { conversation_id: "conversation-1", status: "SUCCESS", response: "reply", num_turns: 2, usage: { input_tokens: 112, output_tokens: 23, thinking_tokens: 4, cache_read_tokens: 50, total_tokens: 135 } } };
   const events = await collect(`for(const record of ${JSON.stringify([update, update, final])})console.log(JSON.stringify(record));`);
   assert.deepEqual(events.at(-1).result.usage, { input_tokens: 12, output_tokens: 3, thinking_tokens: 1, cache_read_tokens: 5, total_tokens: 15 });
+});
+
+test("resumed tool usage stays on that step and a resumed turn without step usage reports none", async () => {
+  const tool = { event: "step_update", step_update: { conversation_id: "conversation-1", step_index: 4, step_type: "tool", state: "DONE", usage: { input_tokens: 9, output_tokens: 1, thinking_tokens: 0, cache_read_tokens: 0, total_tokens: 10 } } };
+  const final = { event: "result", result: { status: "SUCCESS", response: "ok", usage: { input_tokens: 500, output_tokens: 80, total_tokens: 580 } } };
+  const withTool = await collect(`for (const record of ${JSON.stringify([tool, final])}) console.log(JSON.stringify(record));`, { useResume: true });
+  assert.deepEqual(withTool.at(-1).result.usage, tool.step_update.usage);
+  const bare = await collect(`console.log(${JSON.stringify(JSON.stringify(final))});`, { useResume: true });
+  assert.equal(bare.at(-1).result.usage, undefined);
+  const firstTurn = await collect(`console.log(${JSON.stringify(JSON.stringify(final))});`);
+  assert.deepEqual(firstTurn.at(-1).result.usage, final.result.usage);
+});
+
+test("parser maps thinking tokens onto reasoningTokens", () => {
+  assert.deepEqual(
+    parse({ event: "result", result: { status: "SUCCESS", response: "ok", usage: { input_tokens: 1, output_tokens: 2, thinking_tokens: 3, cache_read_tokens: 4, total_tokens: 6 } } }).usage,
+    { input: 1, output: 2, reasoningTokens: 3, cacheRead: 4, total: 6 },
+  );
 });
 
 test("transport cleans up the child when its consumer stops or the run is cancelled", async () => {

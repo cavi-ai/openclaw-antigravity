@@ -121,7 +121,7 @@ openclaw config set plugins.entries.antigravity.config.command /absolute/path/to
   OpenClaw `/compact` is unsupported for this backend. AGY's current stream does
   not expose dedicated compaction status events.
 - Inline image input is not supported by `agy --print`.
-- Per-token cost is reported as zero because Antigravity is subscription-backed.
+- Per-token cost stays zero unless the Google provider has a positive rate for the same model id. `agy models` does not supply a rate.
 - Context-window values are conservative because the CLI does not publish per-model limits.
 
 ## Development
