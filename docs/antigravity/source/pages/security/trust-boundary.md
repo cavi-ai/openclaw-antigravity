@@ -10,7 +10,9 @@ auth profiles prefixed `antigravity-cli:`, `antigravity:`, or `agy:`. Another
 Each turn creates an `agy --print` subprocess. The configured `command` is an
 executable path, not a shell command; use an absolute path and avoid shell
 metacharacters. Runs are serialized so two turns do not interleave writes to
-one `agy` conversation.
+one `agy` conversation. Catalog rows keep a loopback `baseUrl` because the
+host requires one, and they record api `pi-messages` so that placeholder is
+not an OpenAI HTTP endpoint.
 
 The plugin does not add network isolation or a separate tool sandbox around
 `agy`. The `mode` and `skipPermissions` settings affect what the CLI may do.

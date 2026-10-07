@@ -164,6 +164,43 @@ test("doctor repair removes a stored agy-session key and still drops stale profi
   ]);
 });
 
+test("doctor repair keeps a profile that names another provider", () => {
+  const repaired = normalizeCompatibilityConfig({
+    cfg: {
+      auth: {
+        profiles: {
+          "agy:foreign": { provider: "custom-tool", mode: "token" },
+          "antigravity:legacy": { mode: "oauth" },
+        },
+      },
+    },
+  });
+  assert.deepEqual(repaired.config.auth.profiles, {
+    "agy:foreign": { provider: "custom-tool", mode: "token" },
+  });
+});
+
+test("doctor repair rewrites a stored openai-completions catalog api", () => {
+  const repaired = normalizeCompatibilityConfig({
+    cfg: {
+      models: {
+        providers: {
+          "antigravity-cli": {
+            api: "openai-completions",
+            baseUrl: "http://127.0.0.1/antigravity-cli",
+            models: [{ id: "gemini-3.1-pro", api: "openai-completions" }],
+          },
+        },
+      },
+    },
+  });
+  const provider = repaired.config.models.providers["antigravity-cli"];
+  assert.equal(provider.api, "pi-messages");
+  assert.equal(provider.models[0].api, "pi-messages");
+  assert.equal(provider.baseUrl, "http://127.0.0.1/antigravity-cli");
+  assert.deepEqual(repaired.changes, ["Recorded the Antigravity catalog api as a non-HTTP adapter."]);
+});
+
 test("doctor repair leaves a different Antigravity apiKey and unrelated config", () => {
   const cfg = {
     models: { providers: { "antigravity-cli": { apiKey: "user-key" } } },

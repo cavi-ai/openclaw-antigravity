@@ -19,6 +19,7 @@ import {
   ANTIGRAVITY_MODEL_ALIASES,
   ANTIGRAVITY_MODEL_API,
   antigravityEffortLevels,
+  antigravityModelReasons,
   buildAntigravityModelCatalog,
   defaultAntigravityEffort,
   normalizeAntigravityModelIds,
@@ -38,6 +39,9 @@ const ANTIGRAVITY_OPENCLAW_CONTEXT = [
   "Use the installed `openclaw` CLI for OpenClaw operations and check its help before assuming command syntax.",
   "Use `mcporter` for external MCP servers that OpenClaw manages and check its help before assuming command syntax.",
   "Do not change global OpenClaw or mcporter configuration unless the user explicitly asks.",
+  "Inline images are not supported.",
+  "Do not run OpenClaw /compact. agy compacts its own conversation.",
+  "Tool activity shown to the user is work agy already performed.",
 ].join(" ");
 
 /** Provider SDK system-prompt contribution. Scoped to this provider by the host. */
@@ -76,9 +80,9 @@ function describeCommandFailure(error) {
   const output = [error.stderr, error.stdout, error.message]
     .filter(Boolean)
     .join("\n")
+    .replace(/\s+/g, " ")
     .trim();
-  const first = output.split(/\r?\n/).find((line) => line.trim());
-  return first ? first.trim().slice(0, 300) : "agy failed.";
+  return output ? output.slice(0, 300) : "agy failed.";
 }
 
 function reconnectStepFailure(step, error) {
@@ -147,8 +151,8 @@ export const ANTIGRAVITY_THINKING_PROFILE = {
  * lists, with no `off`. Models that reject the flag offer only `off`.
  * Unknown models keep the generic profile.
  */
-export function antigravityThinkingProfile(modelId) {
-  const levels = antigravityEffortLevels(modelId);
+export function antigravityThinkingProfile(modelId, effortStore) {
+  const levels = antigravityEffortLevels(modelId, effortStore);
   if (!levels) {
     return ANTIGRAVITY_THINKING_PROFILE;
   }
@@ -168,6 +172,7 @@ export function antigravityThinkingProfile(modelId) {
 export function buildAntigravityProvider(options = {}, dependencies = {}) {
   const command = options.command?.trim() || "agy";
   const execute = dependencies.runCommand ?? runCommand;
+  const effortStore = dependencies.effortStore;
   let liveModelCache = { at: 0, ids: [] };
 
   const listModels = async (context = {}) => {
@@ -179,7 +184,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     const output = await execute(command, ["models"], context);
     throwIfAborted(context.signal);
     const agyIds = parseAntigravityModelIds(output);
-    recordAntigravityModelEfforts(agyIds);
+    recordAntigravityModelEfforts(agyIds, effortStore);
     const ids = normalizeAntigravityModelIds(agyIds);
     liveModelCache = { at: now, ids };
     return ids;
@@ -233,7 +238,10 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     return Array.isArray(models) ? models : [];
   };
 
-  const catalogOptionsFor = (config) => ({ googleModels: googleModelsFrom(config) });
+  const catalogOptionsFor = (config) => ({
+    googleModels: googleModelsFrom(config),
+    effortStore,
+  });
 
   // On a successful reconnect, persist the endpoint and the model rows from
   // the `agy models` listing just fetched. A retired apiKey marker is dropped.
@@ -385,14 +393,9 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
             throw error;
           }
         }
-        return {
-          provider: {
-            baseUrl: ANTIGRAVITY_BASE_URL,
-            api: ANTIGRAVITY_MODEL_API,
-            defaultModel: ANTIGRAVITY_DEFAULT_MODEL,
-            models: buildAntigravityModelCatalog(undefined, catalogOptionsFor(context.config)),
-          },
-        };
+        // The host static catalog is the fallback. Returning it here would
+        // label the snapshot as a live listing.
+        return undefined;
       },
     },
     staticCatalog: {
@@ -418,7 +421,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
         },
       },
     },
-    resolveThinkingProfile: (ctx) => antigravityThinkingProfile(ctx?.modelId),
+    resolveThinkingProfile: (ctx) => antigravityThinkingProfile(ctx?.modelId, effortStore),
     resolveSystemPromptContribution: antigravitySystemPromptContribution,
     // agy accepts model ids this catalog has not caught up with. Rather than
     // fail the run, pass an unknown id straight through to `--model`.
@@ -435,7 +438,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
         name: resolved,
         api: ANTIGRAVITY_MODEL_API,
         baseUrl: ANTIGRAVITY_BASE_URL,
-        reasoning: true,
+        reasoning: antigravityModelReasons(resolved, effortStore),
         input: ["text"],
       };
     },

@@ -18,7 +18,8 @@ passed as `agy --effort`, limited to the levels `agy models` lists for the
 model: `low`, `medium`, `high` for Gemini Flash; `low`, `high` for Gemini 3.1
 Pro; `medium` for GPT-OSS. A level outside that snapshot is passed through
 when the live `agy models` listing includes it. `agy` requires the flag on those models, so `off`
-sends the lowest listed level and an unlisted level sends the nearest one.
+sends the lowest listed level. An unlisted level sends the nearest listed level, and a tie sends the lower one.
+When no level is selected, the default is `medium` if that model lists it, otherwise the lowest listed level.
 Claude models reject `--effort`, so the flag is omitted.
 
 Catalog context-window values are conservative budgeting floors because the

@@ -15,7 +15,11 @@ import {
   resolveAntigravityEffort,
   resolveAntigravityTransportModelId,
 } from "./models.js";
-import { executeAntigravityStream, parseAntigravityJsonlEvent } from "./stream.js";
+import {
+  MAX_PROMPT_ARG_CHARS,
+  executeAntigravityStream,
+  parseAntigravityJsonlEvent,
+} from "./stream.js";
 
 export const ANTIGRAVITY_BACKEND_ID = "antigravity-cli";
 export const TOOL_FREE_SETUP_AGENT_ID = "openclaw-antigravity-setup";
@@ -156,7 +160,7 @@ export function buildBaseArgs(options = {}) {
  * @param {{command?: string, mode?: string, skipPermissions?: boolean}} [options]
  *   Plugin config from `plugins.entries.antigravity.config`.
  */
-export function buildAntigravityCliBackend(options = {}) {
+export function buildAntigravityCliBackend(options = {}, effortStore) {
   const base = buildBaseArgs(options);
   const command = resolveAntigravityCommand(options.command?.trim() || DEFAULT_COMMAND);
   return {
@@ -174,13 +178,22 @@ export function buildAntigravityCliBackend(options = {}) {
     nativeToolMode: "always-on",
     ownsNativeCompaction: true,
     parseJsonlEvent: parseAntigravityJsonlEvent,
-    prepareExecution: () => ({ execute: executeAntigravityStream }),
+    prepareExecution: () => ({
+      execute: (context) => {
+        const env = buildAntigravityCommandEnv(context?.env);
+        return executeAntigravityStream({
+          ...context,
+          env,
+          command: resolveAntigravityCommand(context?.command, env),
+        });
+      },
+    }),
     resolveExecutionArgs: ({ baseArgs, executionMode, thinkingLevel, modelId }) => {
       // agy requires `--effort` on models with effort rows, including the
       // setup probe, and rejects it on Claude.
       const args = resolveAntigravityEffortArgs(
         baseArgs,
-        resolveAntigravityEffort(modelId, thinkingLevel),
+        resolveAntigravityEffort(modelId, thinkingLevel, effortStore),
       );
       return executionMode === "side-question"
         ? [...args, "--agent", TOOL_FREE_SETUP_AGENT_ID]
@@ -200,7 +213,7 @@ export function buildAntigravityCliBackend(options = {}) {
       input: "arg",
       // agy takes the prompt as an argv value. Very long prompts blow the argv
       // limit, so hand those to stdin instead.
-      maxPromptArgChars: 96_000,
+      maxPromptArgChars: MAX_PROMPT_ARG_CHARS,
       modelArg: "--model",
       modelAliases: { ...ANTIGRAVITY_MODEL_ALIASES },
       sessionMode: "existing",

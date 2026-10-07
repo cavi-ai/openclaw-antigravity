@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildAntigravityCliBackend } from "../src/cli-backend.js";
+import { MAX_PROMPT_ARG_CHARS } from "../src/stream.js";
 
 const parse = (record) => buildAntigravityCliBackend().parseJsonlEvent(JSON.stringify(record));
 const step = (update) => ({ event: "step_update", step_update: { conversation_id: "conversation-1", step_index: 2, ...update } });
@@ -68,11 +69,14 @@ test("transport waits for a successful terminal result and handles split UTF-8 r
   await assert.rejects(collect(`console.log(JSON.stringify({event:'result',result:{status:'SUCCESS'}}));console.log(JSON.stringify({event:'init'}));`), /after its terminal result/);
 });
 
-test("transport preserves initial system guidance and per-turn context without replaying system guidance on resume", async () => {
+test("transport sends system guidance on the first turn and again on resume", async () => {
   const script = `console.log(JSON.stringify({event:'result',result:{status:'SUCCESS',response:process.argv[process.argv.indexOf('--print')+1]}}));`;
   const extra = { args: ["-e", script, "--", "--print", "original", "--output-format", "stream-json"], systemPrompt: "system guidance", prompt: "--user request", promptContext: { prependContext: "before", appendContext: "after" } };
   assert.equal((await collect(script, extra))[0].result.response, "system guidance\n\nbefore\n\n--user request\n\nafter");
-  assert.equal((await collect(script, { ...extra, useResume: true }))[0].result.response, "before\n\n--user request\n\nafter");
+  assert.equal(
+    (await collect(script, { ...extra, useResume: true }))[0].result.response,
+    "system guidance\n\nbefore\n\n--user request\n\nafter",
+  );
   assert.equal(
     (await collect(script, { ...extra, executionMode: "side-question" }))[0].result.response,
     "before\n\n--user request\n\nafter",
@@ -109,6 +113,46 @@ test("parser maps thinking tokens onto reasoningTokens", () => {
     parse({ event: "result", result: { status: "SUCCESS", response: "ok", usage: { input_tokens: 1, output_tokens: 2, thinking_tokens: 3, cache_read_tokens: 4, total_tokens: 6 } } }).usage,
     { input: 1, output: 2, reasoningTokens: 3, cacheRead: 4, total: 6 },
   );
+});
+
+test("a clean exit without a terminal result keeps stderr", async () => {
+  await assert.rejects(collect(`process.stderr.write("quota exceeded\\n");`), /without a terminal result: quota exceeded/);
+});
+
+test("turn usage sums distinct step snapshots", async () => {
+  const first = { event: "step_update", step_update: { conversation_id: "conversation-1", step_index: 1, step_type: "agent_response", state: "DONE", usage: { input_tokens: 4, output_tokens: 2, total_tokens: 6 } } };
+  const second = { event: "step_update", step_update: { conversation_id: "conversation-1", step_index: 3, step_type: "tool", state: "DONE", usage: { input_tokens: 5, output_tokens: 1, total_tokens: 6 } } };
+  const final = { event: "result", result: { status: "SUCCESS", response: "ok", usage: { input_tokens: 100, output_tokens: 80, total_tokens: 180 } } };
+  const events = await collect(`for (const record of ${JSON.stringify([first, second, final])}) console.log(JSON.stringify(record));`);
+  assert.deepEqual(events.at(-1).result.usage, { input_tokens: 9, output_tokens: 3, total_tokens: 12 });
+});
+
+test("prompt argv and stdin share one size cutoff", () => {
+  assert.equal(buildAntigravityCliBackend().config.maxPromptArgChars, MAX_PROMPT_ARG_CHARS);
+});
+
+test("transport resolves a bare agy command from the installer bin", async () => {
+  if (process.platform === "win32") return;
+  const home = await mkdtemp(join(tmpdir(), "agy-home-"));
+  const bin = join(home, ".local", "bin");
+  const agy = join(bin, "agy");
+  await mkdir(bin, { recursive: true });
+  await writeFile(
+    agy,
+    `#!${process.execPath}\nconsole.log(JSON.stringify({event:"result",result:{status:"SUCCESS",response:"resolved"}}));\n`,
+  );
+  await chmod(agy, 0o755);
+  try {
+    const events = await collect("", {
+      command: "agy",
+      args: [],
+      env: { HOME: home, PATH: "/usr/bin:/bin" },
+      prompt: "hi",
+    });
+    assert.equal(events[0].result.response, "resolved");
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 test("transport cleans up the child when its consumer stops or the run is cancelled", async () => {

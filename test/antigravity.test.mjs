@@ -11,6 +11,7 @@ import {
   ANTIGRAVITY_MODEL_API,
   ANTIGRAVITY_MODEL_IDS,
   buildAntigravityModelCatalog,
+  createAntigravityEffortStore,
   effortLevelsFromAgyIds,
   labelForModelId,
   recordAntigravityModelEfforts,
@@ -29,7 +30,7 @@ import {
   shouldDeferAntigravitySyntheticProfileAuth,
 } from "../src/session.js";
 import { plugin } from "../src/index.js";
-import { unifiedAntigravityCatalog } from "../src/register.js";
+import { loadAntigravityLiveCatalog, unifiedAntigravityCatalog } from "../src/register.js";
 
 test("backend streams agy events and leaves native compaction with agy", () => {
   const backend = buildAntigravityCliBackend();
@@ -213,11 +214,11 @@ test("claude models omit --effort", () => {
 test("thinking level maps to an --effort the model lists", () => {
   recordAntigravityModelEfforts([]);
   const cases = [
-    ["gemini-3.1-pro", "medium", "high"],
-    ["gemini-3.1-pro", undefined, "high"],
+    ["gemini-3.1-pro", "medium", "low"],
+    ["gemini-3.1-pro", undefined, "low"],
     ["gemini-3.1-pro", "low", "low"],
     ["gemini-3.1-pro", "minimal", "low"],
-    ["gemini-3.1-pro-high", "adaptive", "high"],
+    ["gemini-3.1-pro-high", "adaptive", "low"],
     ["gemini-3.8-flash", "off", "low"],
     ["gemini-3.8-flash", undefined, "medium"],
     ["gemini-3.8-flash", "xhigh", "high"],
@@ -241,7 +242,7 @@ test("a listed effort outside low medium high reaches agy", () => {
     const backend = buildAntigravityCliBackend();
     assert.deepEqual(antigravityThinkingProfile("gemini-3.1-pro"), {
       levels: [{ id: "low" }, { id: "xhigh" }],
-      defaultLevel: "xhigh",
+      defaultLevel: "low",
     });
     assert.equal(resolveAntigravityEffort("gemini-3.1-pro", "xhigh"), "xhigh");
     assert.equal(backend.resolveModelId({ modelId: "gemini-3.1-pro-xhigh" }), "gemini-3.1-pro");
@@ -268,7 +269,7 @@ test("side-question keeps the model's --effort and uses the tool-free agent", ()
       executionMode: "side-question",
       modelId: "gemini-3.1-pro",
     }),
-    ["--print", "{prompt}", "--effort", "high", "--agent", "openclaw-antigravity-setup"],
+    ["--print", "{prompt}", "--effort", "low", "--agent", "openclaw-antigravity-setup"],
   );
   assert.deepEqual(
     backend.resolveExecutionArgs({
@@ -295,6 +296,9 @@ test("live agy models listing overrides the effort snapshot", async () => {
       "gpt-oss-120b": ["medium"],
     },
   );
+  assert.deepEqual(effortLevelsFromAgyIds(["gemini-3.1-pro", "claude-sonnet-4-6"]), {
+    "claude-sonnet-4-6": [],
+  });
   const provider = buildAntigravityProvider(
     {},
     {
@@ -310,7 +314,51 @@ test("live agy models listing overrides the effort snapshot", async () => {
   } finally {
     recordAntigravityModelEfforts([]);
   }
-  assert.equal(resolveAntigravityEffort("gemini-3.1-pro", "medium"), "high");
+  assert.equal(resolveAntigravityEffort("gemini-3.1-pro", "medium"), "low");
+});
+
+test("a provider effort store does not replace the process snapshot", async () => {
+  recordAntigravityModelEfforts([]);
+  const effortStore = createAntigravityEffortStore();
+  const provider = buildAntigravityProvider(
+    {},
+    {
+      effortStore,
+      runCommand: async () => "gemini-3.1-pro-xhigh\tGemini 3.1 Pro XHigh\n",
+    },
+  );
+  const backend = buildAntigravityCliBackend({}, effortStore);
+  await provider.catalog.run({ config: {}, env: {} });
+  assert.equal(resolveAntigravityEffort("gemini-3.1-pro", "xhigh"), "high");
+  assert.equal(
+    backend
+      .resolveExecutionArgs({
+        baseArgs: ["--print", "{prompt}"],
+        executionMode: "agent",
+        thinkingLevel: "xhigh",
+        modelId: "gemini-3.1-pro",
+      })
+      .at(-1),
+    "xhigh",
+  );
+  recordAntigravityModelEfforts([]);
+});
+
+test("reconnect keeps later lines from an agy failure", async () => {
+  const provider = buildAntigravityProvider(
+    {},
+    {
+      runCommand: async () => {
+        const error = new Error("banner");
+        error.stderr = "loading\nquota exceeded";
+        throw error;
+      },
+    },
+  );
+  await assert.rejects(
+    provider.auth[0].run({ config: {}, env: {} }),
+    /could not check the Antigravity CLI version.*quota exceeded/,
+  );
 });
 
 test("backend resumes agy by conversation id", () => {
@@ -572,7 +620,9 @@ test("reconnect names a model-list failure separately from setup", async () => {
     sessionDeps(async (_command, args) => {
       if (args[0] === "--version") return "1.2.3\n";
       if (args[0] === "plugin") return "";
-      throw new Error("models unavailable");
+      const error = new Error("models unavailable");
+      error.stderr = "banner\nquota exceeded";
+      throw error;
     }),
   );
   const context = {
@@ -580,8 +630,14 @@ test("reconnect names a model-list failure separately from setup", async () => {
     env: {},
     modelRef: "antigravity-cli/gemini-3.1-pro",
   };
-  await assert.rejects(provider.auth[0].run({ config: {}, env: {} }), /could not list models.*models unavailable/);
-  await assert.rejects(provider.auth[0].appGuidedSetup.prepare(context), /could not list models.*models unavailable/);
+  await assert.rejects(
+    provider.auth[0].run({ config: {}, env: {} }),
+    /could not list models.*banner quota exceeded models unavailable/,
+  );
+  await assert.rejects(
+    provider.auth[0].appGuidedSetup.prepare(context),
+    /could not list models.*banner quota exceeded models unavailable/,
+  );
 });
 
 test("guided reconnect propagates cancellation", async () => {
@@ -720,7 +776,7 @@ test("provider catalog covers every listed agy model", async () => {
   assert.equal(result.provider.api, ANTIGRAVITY_MODEL_API);
   for (const model of result.provider.models) {
     assert.equal(model.api, ANTIGRAVITY_MODEL_API);
-    assert.equal(model.reasoning, true);
+    assert.equal(model.reasoning, !model.id.startsWith("claude-"));
   }
 });
 
@@ -730,7 +786,7 @@ test("thinking profile offers only the effort levels agy lists for the model", (
     buildAntigravityProvider().resolveThinkingProfile({ provider: "antigravity-cli", modelId });
   assert.deepEqual(profile("gemini-3.1-pro"), {
     levels: [{ id: "low" }, { id: "high" }],
-    defaultLevel: "high",
+    defaultLevel: "low",
   });
   assert.deepEqual(profile("gemini-3.8-flash"), {
     levels: [{ id: "low" }, { id: "medium" }, { id: "high" }],
@@ -798,6 +854,7 @@ test("dynamic models carry required catalog shape fields", () => {
   assert.equal(model.baseUrl, ANTIGRAVITY_BASE_URL);
   assert.equal(model.api, ANTIGRAVITY_MODEL_API);
   assert.equal(model.reasoning, true);
+  assert.equal(buildAntigravityProvider().resolveDynamicModel({ modelId: "claude-sonnet-4-6" }).reasoning, false);
   assert.equal(model.id, "gemini-4-pro");
 });
 
@@ -980,7 +1037,7 @@ test("live catalog uses the models currently reported by agy", async () => {
   assert.equal(result.provider.defaultModel, "gemini-3.8-flash");
 });
 
-test("live catalog falls back to the static catalog when agy cannot list models", async () => {
+test("live catalog does not publish the static snapshot when agy cannot list models", async () => {
   const provider = buildAntigravityProvider(
     {},
     {
@@ -989,9 +1046,10 @@ test("live catalog falls back to the static catalog when agy cannot list models"
       },
     },
   );
-  const result = await provider.catalog.run({ config: {}, env: {} });
+  assert.equal(await provider.catalog.run({ config: {}, env: {} }), undefined);
+  assert.deepEqual(await loadAntigravityLiveCatalog(provider, { config: {}, env: {} }), []);
   assert.deepEqual(
-    result.provider.models.map((model) => model.id),
+    (await provider.staticCatalog.run()).provider.models.map((model) => model.id),
     ANTIGRAVITY_MODEL_IDS,
   );
 });
