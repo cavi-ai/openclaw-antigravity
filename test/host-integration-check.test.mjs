@@ -6,10 +6,18 @@ import {
   assertAgySession,
   assertReconnectProjection,
   buildGatewayCallArgs,
+  buildIsolatedHostEnv,
   commandOutput,
   createIsolatedAgyHome,
   withTemporaryRoot,
 } from "../scripts/check-host-integration.mjs";
+
+test("isolated host keeps execution settings without unrelated credentials or state locators", () => {
+  const env = buildIsolatedHostEnv({ PATH: "/bin", HTTPS_PROXY: "http://proxy", TMPDIR: "/tmp",
+    FIRECRAWL_API_KEY: "unrelated", OPENCLAW_CONFIG_PATH: "/live/config", OPENCLAW_AGENT_DIR: "/live/agent",
+  });
+  assert.deepEqual(env, { PATH: "/bin", HTTPS_PROXY: "http://proxy", TMPDIR: "/tmp" });
+});
 
 test("external commands are terminated at their process timeout", () => {
   assert.throws(

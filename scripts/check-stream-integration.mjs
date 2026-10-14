@@ -5,9 +5,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runHostIntegrationCheck } from "./check-host-integration.mjs";
+import { normalizeAntigravityModelIds } from "../src/models.js";
 
 /** Exercise native AGY -> plugin -> Gateway text/tool events on disposable host state. */
-export async function verifyStreamingRuntime({ gatewayUrl, gatewayToken, tempRoot }) {
+export async function verifyStreamingRuntime({ gatewayUrl, gatewayToken, tempRoot, modelIds }) {
   const workspace = join(tempRoot, "stream-workspace");
   await mkdir(workspace, { recursive: true });
   const marker = `stream-fixture-${randomUUID()}`;
@@ -78,7 +79,7 @@ export async function verifyStreamingRuntime({ gatewayUrl, gatewayToken, tempRoo
   try {
     await hello;
     clearTimeout(helloTimer);
-    await request("sessions.patch", { key: sessionKey, model: "antigravity-cli/gemini-3.1-pro", thinkingLevel: "low", verboseLevel: "full" });
+    await request("sessions.patch", { key: sessionKey, model: `antigravity-cli/${normalizeAntigravityModelIds(modelIds)[0]}`, thinkingLevel: "low", verboseLevel: "full" });
     const first = await sendTurn(`Read ${fixture} using your built-in file reader. Reply with the file contents. Do not run commands, write files, or use other tools.`);
     const agentEvents = first.events.filter((frame) => frame.event === "agent").map((frame) => frame.payload);
     const deltas = agentEvents.filter((event) => event.stream === "assistant" && event.data?.delta);

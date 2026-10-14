@@ -1,10 +1,11 @@
 // Model catalog for Google's Antigravity CLI (`agy`).
 //
+import { splitTrailingAuthProfile } from "openclaw/plugin-sdk/model-ref-parse";
+
 // The static list is one OpenClaw id per model. `agy models` prints effort
 // suffixes; those collapse here. Thinking level is `agy --effort`, limited to
-// the levels agy lists for that model. Claude rejects the flag. Opus is sent to
-// agy as `claude-opus-4-6-thinking`. Reconnect writes these rows into the
-// provider config.
+// the levels agy lists for that model. Legacy Claude 4.6 rejects the flag.
+// Reconnect writes these rows into the provider config.
 
 const EFFORT_RANK = { minimal: 1, low: 1, medium: 2, high: 3, xhigh: 3, max: 3 };
 const EFFORT_SUFFIX = new RegExp(`-(?:${Object.keys(EFFORT_RANK).join("|")})$`, "u");
@@ -15,7 +16,7 @@ export function isAntigravityEffortLevel(level) {
 }
 
 /**
- * `--effort` levels each model accepts, from `agy models` on agy 1.2.8. agy
+ * Current `--effort` levels from agy 1.3.4, with legacy compatibility entries. agy
  * rejects a model with effort rows when the flag is missing or not listed, and
  * rejects the flag on models without effort rows. Live `agy models` overrides.
  */
@@ -26,6 +27,8 @@ const ANTIGRAVITY_MODEL_EFFORTS = {
   "gemini-3.1-pro": ["low", "high"],
   "claude-sonnet-4-6": [],
   "claude-opus-4-6": [],
+  "claude-opus-5-5": ["low", "medium", "high"],
+  "claude-sonnet-5-5": ["low", "medium", "high"],
   "gpt-oss-120b": ["medium"],
 };
 
@@ -36,8 +39,8 @@ export function createAntigravityEffortStore() {
 const defaultEffortStore = createAntigravityEffortStore();
 
 /**
- * agy ids that are not the OpenClaw id. Claude Opus is only recognized as
- * `claude-opus-4-6-thinking`, and `--effort` is rejected for Claude models.
+ * Legacy agy ids that differ from the OpenClaw id. Opus 4.6 uses the
+ * `-thinking` transport suffix; current Claude models use their canonical ids.
  */
 const TRANSPORT_MODEL_IDS = {
   "claude-opus-4-6": "claude-opus-4-6-thinking",
@@ -46,15 +49,12 @@ const TRANSPORT_MODEL_IDS = {
 /** OpenClaw catalog ids. One row per model; effort is not part of the id. */
 export const ANTIGRAVITY_MODEL_IDS = [
   "gemini-3.8-flash",
-  "gemini-3.7-flash",
-  "gemini-3.6-flash",
-  "gemini-3.1-pro",
-  "claude-sonnet-4-6",
-  "claude-opus-4-6",
+  "claude-opus-5-5",
+  "claude-sonnet-5-5",
   "gpt-oss-120b",
 ];
 
-export const ANTIGRAVITY_DEFAULT_MODEL = "gemini-3.1-pro";
+export const ANTIGRAVITY_DEFAULT_MODEL = "gemini-3.8-flash";
 
 /**
  * Placeholder endpoint for the catalog row. `agy` owns the transport, so this is
@@ -66,9 +66,8 @@ export const ANTIGRAVITY_BASE_URL = "http://127.0.0.1/antigravity-cli";
 
 /**
  * Schema adapter recorded on catalog rows. OpenClaw requires `baseUrl` and an
- * api from its model enum. `openai-completions` is an HTTP transport and is
- * probed on loopback; `pi-messages` is accepted and has no HTTP transport.
- * agy remains the runtime.
+ * api from its model enum. `pi-messages` records the native schema; the provider
+ * stream owns execution through AGY.
  */
 export const ANTIGRAVITY_MODEL_API = "pi-messages";
 export const RETIRED_ANTIGRAVITY_MODEL_API = "openai-completions";
@@ -81,15 +80,16 @@ export const ANTIGRAVITY_MODEL_ALIASES = {
   pro: "gemini-3.1-pro",
   flash: "gemini-3.8-flash",
   "flash-lite": "gemini-3.8-flash",
-  sonnet: "claude-sonnet-4-6",
-  opus: "claude-opus-4-6",
+  sonnet: "claude-sonnet-5-5",
+  opus: "claude-opus-5-5",
   "gpt-oss": "gpt-oss-120b",
 };
 
-/** Drops an effort suffix. `-thinking` stays until transport resolution. */
+/** Drops host auth-profile and effort suffixes; preserves model version suffixes. */
 export function openClawModelId(modelId) {
   const id = typeof modelId === "string" ? modelId.trim() : "";
-  return id.replace(EFFORT_SUFFIX, "");
+  const model = splitTrailingAuthProfile(id).model.replace(EFFORT_SUFFIX, "");
+  return ANTIGRAVITY_MODEL_ALIASES[model] ?? model;
 }
 
 /** Collapses effort-qualified `agy models` rows into OpenClaw catalog ids. */
@@ -107,23 +107,23 @@ export function normalizeAntigravityModelIds(modelIds) {
 }
 
 /**
- * Model id passed to `agy --model`. Gemini and GPT-OSS use the OpenClaw id.
- * Claude Opus is sent as the only id agy recognizes.
+ * Model id passed to `agy --model`, preserving legacy transport aliases.
  */
 export function resolveAntigravityTransportModelId(modelId) {
-  const id = openClawModelId(String(modelId ?? "").replace(/-thinking$/u, ""));
+  const id = openClawModelId(modelId).replace(/-thinking$/u, "");
   return TRANSPORT_MODEL_IDS[id] ?? id;
 }
 
-/** Claude models reject `agy --effort`. Gemini and GPT-OSS accept it. */
+/** Legacy Claude models reject `--effort`; current and unknown models may accept it. */
 export function antigravityModelSupportsEffort(modelId) {
-  return !openClawModelId(modelId).startsWith("claude-");
+  const id = openClawModelId(modelId).replace(/-thinking$/u, "");
+  return ANTIGRAVITY_MODEL_EFFORTS[id]?.length !== 0;
 }
 
 /**
  * Maps raw `agy models` ids to the effort levels each OpenClaw id accepts.
- * A bare effort-capable id does not enter the map, so the snapshot stays.
- * Claude rows record an empty list, which omits `--effort`.
+ * Bare known ids retain the snapshot. Bare unfamiliar ids record an empty
+ * list, which omits `--effort`; suffixed rows take precedence in either order.
  */
 export function effortLevelsFromAgyIds(agyIds) {
   const efforts = {};
@@ -142,7 +142,7 @@ export function effortLevelsFromAgyIds(agyIds) {
       efforts[id] = levels.sort((a, b) => EFFORT_RANK[a] - EFFORT_RANK[b]);
       continue;
     }
-    if (!antigravityModelSupportsEffort(id) && !Object.hasOwn(efforts, id)) {
+    if ((!Object.hasOwn(ANTIGRAVITY_MODEL_EFFORTS, id) || !antigravityModelSupportsEffort(id)) && !Object.hasOwn(efforts, id)) {
       efforts[id] = [];
     }
   }
@@ -160,7 +160,7 @@ export function recordAntigravityModelEfforts(agyIds, store = defaultEffortStore
  * `[]` means the flag is rejected; `undefined` means the model is unknown.
  */
 export function antigravityEffortLevels(modelId, store = defaultEffortStore) {
-  const id = openClawModelId(String(modelId ?? "").replace(/-thinking$/u, ""));
+  const id = openClawModelId(modelId).replace(/-thinking$/u, "");
   return store.live?.[id] ?? ANTIGRAVITY_MODEL_EFFORTS[id];
 }
 

@@ -13,6 +13,7 @@ export const ANTIGRAVITY_NATIVE_AUTH_MARKER = ["openclaw", "antigravity-cli-nati
 export const ANTIGRAVITY_SESSION_MARKER = "agy-session";
 
 export const ANTIGRAVITY_SYNTHETIC_AUTH_SOURCE = "Antigravity CLI native login";
+export const ANTIGRAVITY_NATIVE_PROFILE_ID = "antigravity-cli:native";
 
 const AUTH_MARKERS = new Set([ANTIGRAVITY_NATIVE_AUTH_MARKER, ANTIGRAVITY_SESSION_MARKER]);
 

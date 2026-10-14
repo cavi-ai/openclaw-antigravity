@@ -54,15 +54,15 @@ test("package.json is ClawHub-ready and ships setup/doctor modules", () => {
   assert.equal(plugin.id, manifest.id);
   assert.equal(plugin.name, manifest.name);
   assert.deepEqual(plugin.configSchema, manifest.configSchema);
-  assert.equal(pkg.openclaw.compat.pluginApi, ">=2026.9.6");
-  assert.equal(pkg.openclaw.compat.minGatewayVersion, "2026.9.6");
-  assert.equal(pkg.openclaw.build.openclawVersion, "2026.9.6");
-  assert.equal(pkg.openclaw.build.pluginSdkVersion, "2026.9.6");
-  assert.equal(pkg.peerDependencies.openclaw, ">=2026.9.6");
-  assert.equal(pkg.devDependencies.openclaw, "2026.9.6");
+  assert.equal(pkg.openclaw.compat.pluginApi, ">=2026.10.2");
+  assert.equal(pkg.openclaw.compat.minGatewayVersion, "2026.10.2");
+  assert.equal(pkg.openclaw.build.openclawVersion, "2026.10.2");
+  assert.equal(pkg.openclaw.build.pluginSdkVersion, "2026.10.2");
+  assert.equal(pkg.peerDependencies.openclaw, ">=2026.10.2");
+  assert.equal(pkg.devDependencies.openclaw, "2026.10.2");
   assert.equal(pkg.name, "@cavi-ai/antigravity");
   assert.equal(pkg.openclaw.install.npmSpec, "@cavi-ai/antigravity");
-  assert.equal(pkg.openclaw.install.minHostVersion, ">=2026.9.6");
+  assert.equal(pkg.openclaw.install.minHostVersion, ">=2026.10.2");
   assert.ok(pkg.files.includes("setup-api.js"));
   assert.ok(pkg.files.includes("doctor-contract-api.js"));
   assert.ok(pkg.files.includes("openclaw.plugin.json"));
@@ -105,7 +105,7 @@ test("doctor contract owns antigravity-cli session routes", () => {
   assert.ok(owner.authProfilePrefixes.some((p) => p.startsWith("antigravity-cli:")));
 });
 
-test("doctor repair drops Antigravity auth bindings and leaves other providers", () => {
+test("doctor preserves saved Antigravity profiles and their order", () => {
   const repaired = normalizeCompatibilityConfig({
     cfg: {
       models: {
@@ -133,13 +133,20 @@ test("doctor repair drops Antigravity auth bindings and leaves other providers",
   assert.equal(repaired.config.models.providers["antigravity-cli"].apiKey, undefined);
   assert.equal(repaired.config.models.providers.ollama.apiKey, "ollama-local");
   assert.deepEqual(repaired.config.auth.profiles, {
+    "antigravity-cli:default": { provider: "antigravity-cli", mode: "oauth" },
+    "antigravity-cli:agy": { provider: "antigravity-cli", mode: "token" },
+    "antigravity:legacy": { mode: "oauth" },
+    "agy:legacy": { mode: "token" },
     "ollama:default": { provider: "ollama", mode: "api_key" },
   });
-  assert.deepEqual(repaired.config.auth.order, { openai: ["openai:default"] });
-  assert.ok(repaired.changes.length > 0);
+  assert.deepEqual(repaired.config.auth.order, {
+    "antigravity-cli": ["antigravity-cli:agy", "antigravity-cli:default"],
+    openai: ["openai:default"],
+  });
+  assert.deepEqual(repaired.changes, []);
 });
 
-test("doctor repair removes a stored agy-session key and still drops stale profiles", () => {
+test("doctor removes a retired config marker without removing saved profiles", () => {
   const repaired = normalizeCompatibilityConfig({
     cfg: {
       models: {
@@ -157,10 +164,9 @@ test("doctor repair removes a stored agy-session key and still drops stale profi
 
   assert.equal(repaired.config.models.providers["antigravity-cli"].apiKey, undefined);
   assert.equal(repaired.config.models.providers["antigravity-cli"].baseUrl, "http://127.0.0.1/antigravity-cli");
-  assert.equal(repaired.config.auth, undefined);
+  assert.deepEqual(repaired.config.auth, { profiles: { "antigravity-cli:default": { provider: "antigravity-cli", mode: "oauth" } } });
   assert.deepEqual(repaired.changes, [
     "Removed the Antigravity provider apiKey marker. agy owns the login.",
-    "Removed Antigravity auth profile bindings.",
   ]);
 });
 
@@ -177,7 +183,13 @@ test("doctor repair keeps a profile that names another provider", () => {
   });
   assert.deepEqual(repaired.config.auth.profiles, {
     "agy:foreign": { provider: "custom-tool", mode: "token" },
+    "antigravity:legacy": { mode: "oauth" },
   });
+});
+
+test("doctor preserves host-generated native-login bindings", () => {
+  const cfg = { auth: { profiles: { "antigravity-cli:setup-fixture": { provider: "antigravity-cli", mode: "api_key" } }, order: { "antigravity-cli": ["antigravity-cli:setup-fixture"] } } };
+  assert.deepEqual(normalizeCompatibilityConfig({ cfg }), { config: cfg, changes: [] });
 });
 
 test("doctor repair rewrites a stored openai-completions catalog api", () => {

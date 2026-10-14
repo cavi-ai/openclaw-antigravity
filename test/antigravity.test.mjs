@@ -10,6 +10,7 @@ import {
   ANTIGRAVITY_BASE_URL,
   ANTIGRAVITY_MODEL_API,
   ANTIGRAVITY_MODEL_IDS,
+  antigravityEffortLevels,
   buildAntigravityModelCatalog,
   createAntigravityEffortStore,
   effortLevelsFromAgyIds,
@@ -99,6 +100,11 @@ test("backend declares a hard tool-free side-question mode", () => {
       "openclaw-antigravity-setup",
     ],
   );
+});
+
+test("provider supplies native transport for host completion checks", () => {
+  const provider = buildAntigravityProvider();
+  assert.equal(typeof provider.createStreamFn, "function");
 });
 
 test("backend binds the native agy executable as its durable runtime owner", () => {
@@ -229,7 +235,7 @@ test("thinking level maps to an --effort the model lists", () => {
     ["claude-opus-4-6-thinking", "low", undefined],
     ["gemini-4-pro", "low", "low"],
     ["gemini-4-pro", "off", undefined],
-    ["claude-opus-5", "high", undefined],
+    ["claude-opus-5", "high", "high"],
   ];
   for (const [modelId, level, expected] of cases) {
     assert.equal(resolveAntigravityEffort(modelId, level), expected, `${modelId} × ${level}`);
@@ -317,6 +323,23 @@ test("live agy models listing overrides the effort snapshot", async () => {
   assert.equal(resolveAntigravityEffort("gemini-3.1-pro", "medium"), "low");
 });
 
+test("Claude effort models work before discovery and retain live effort limits", async () => {
+  const effortStore = createAntigravityEffortStore();
+  const backend = buildAntigravityCliBackend({}, effortStore);
+  const args = (modelId, thinkingLevel) => backend.resolveExecutionArgs({
+    baseArgs: ["--print", "{prompt}"], executionMode: "agent", modelId, thinkingLevel,
+  });
+  assert.deepEqual(args("claude-opus-5-5", undefined), ["--print", "{prompt}", "--effort", "medium"]);
+  assert.deepEqual(args("claude-sonnet-5-5", "off"), ["--print", "{prompt}", "--effort", "low"]);
+  assert.equal(backend.resolveModelId({ modelId: "claude-opus-5-5-high" }), "claude-opus-5-5");
+  const provider = buildAntigravityProvider({}, {
+    effortStore,
+    runCommand: async () => "claude-opus-5-5-low\tClaude Opus 5.5 Low\nclaude-opus-5-5-high\tClaude Opus 5.5 High\n",
+  });
+  await provider.catalog.run({ config: {}, env: {} });
+  assert.deepEqual(args("claude-opus-5-5", "medium"), ["--print", "{prompt}", "--effort", "low"]);
+});
+
 test("a provider effort store does not replace the process snapshot", async () => {
   recordAntigravityModelEfforts([]);
   const effortStore = createAntigravityEffortStore();
@@ -383,9 +406,9 @@ test("backend exposes short model aliases agy itself does not accept", () => {
   const { modelAliases } = buildAntigravityCliBackend().config;
   assert.equal(modelAliases.pro, "gemini-3.1-pro");
   assert.equal(modelAliases.flash, "gemini-3.8-flash");
-  assert.equal(modelAliases.opus, "claude-opus-4-6");
+  assert.equal(modelAliases.opus, "claude-opus-5-5");
   for (const id of Object.values(modelAliases)) {
-    assert.ok(ANTIGRAVITY_MODEL_IDS.includes(id), `alias target ${id} is not a real agy model`);
+    assert.ok(ANTIGRAVITY_MODEL_IDS.includes(id) || id === "gemini-3.1-pro", `alias target ${id} has no catalog or compatibility mapping`);
   }
 });
 
@@ -422,8 +445,8 @@ test("guided reconnect detects the preferred model through the configured agy co
   );
 
   assert.deepEqual(await provider.auth[0].appGuidedSetup.detect({ config: {}, env: {} }), {
-    modelRef: "antigravity-cli/gemini-3.1-pro",
-    detail: "gemini-3.1-pro via agy",
+    modelRef: "antigravity-cli/gemini-3.8-flash",
+    detail: "gemini-3.8-flash via agy",
   });
   assert.deepEqual(calls, [["/opt/custom-agy", ["models"]]]);
 });
@@ -499,7 +522,7 @@ test("guided reconnect prepares only a model currently reported by agy", async (
       modelRef: "antigravity-cli/claude-sonnet-4-6",
     }),
     {
-      profiles: [],
+      profiles: [{ profileId: "antigravity-cli:native", credential: { type: "api_key", provider: "antigravity-cli", key: ANTIGRAVITY_NATIVE_AUTH_MARKER } }],
       defaultModel: "antigravity-cli/claude-sonnet-4-6",
       configPatch: {
         models: {
@@ -656,7 +679,7 @@ test("guided reconnect propagates cancellation", async () => {
   );
 });
 
-test("interactive reconnect refreshes the provider catalog without an auth profile", async () => {
+test("interactive reconnect records only a non-secret native-login profile and live catalog", async () => {
   const provider = buildAntigravityProvider(
     {},
     sessionDeps(async (_command, args) =>
@@ -665,7 +688,7 @@ test("interactive reconnect refreshes the provider catalog without an auth profi
   );
 
   assert.deepEqual(await provider.auth[0].run({ config: {}, env: {} }), {
-    profiles: [],
+    profiles: [{ profileId: "antigravity-cli:native", credential: { type: "api_key", provider: "antigravity-cli", key: ANTIGRAVITY_NATIVE_AUTH_MARKER } }],
     defaultModel: "antigravity-cli/gemini-3.1-pro",
     configPatch: {
       models: {
@@ -752,7 +775,7 @@ test("reconnect does not write an agent model map or model policy", async () => 
     env: {},
   });
 
-  assert.equal(result.profiles.length, 0);
+  assert.equal(result.profiles.length, 1);
   assert.equal(result.configPatch.agents, undefined);
   assert.equal(result.configPatch.models.providers["antigravity-cli"].models[0].id, "gemini-3.8-flash");
 });
@@ -771,12 +794,12 @@ test("provider catalog covers every listed agy model", async () => {
   const result = await buildAntigravityProvider().staticCatalog.run();
   const ids = result.provider.models.map((model) => model.id);
   assert.deepEqual(ids, ANTIGRAVITY_MODEL_IDS);
-  assert.equal(result.provider.defaultModel, "gemini-3.1-pro");
+  assert.equal(result.provider.defaultModel, "gemini-3.8-flash");
   assert.equal(result.provider.baseUrl, ANTIGRAVITY_BASE_URL);
   assert.equal(result.provider.api, ANTIGRAVITY_MODEL_API);
   for (const model of result.provider.models) {
     assert.equal(model.api, ANTIGRAVITY_MODEL_API);
-    assert.equal(model.reasoning, !model.id.startsWith("claude-"));
+    assert.equal(model.reasoning, true);
   }
 });
 
@@ -831,11 +854,8 @@ test("reconnect keeps a models include and drops a model array", async () => {
 test("catalog ids omit agy effort suffixes", () => {
   assert.deepEqual(ANTIGRAVITY_MODEL_IDS, [
     "gemini-3.8-flash",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.1-pro",
-    "claude-sonnet-4-6",
-    "claude-opus-4-6",
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
     "gpt-oss-120b",
   ]);
   assert.deepEqual(
@@ -890,7 +910,7 @@ test("unknown model ids pass through instead of failing the run", () => {
 
 test("resolveDynamicModel expands aliases and ignores empty ids", () => {
   const provider = buildAntigravityProvider();
-  assert.equal(provider.resolveDynamicModel({ modelId: "opus" }).id, "claude-opus-4-6");
+  assert.equal(provider.resolveDynamicModel({ modelId: "opus" }).id, "claude-opus-5-5");
   assert.equal(provider.resolveDynamicModel({ modelId: "  " }), null);
 });
 
@@ -957,7 +977,7 @@ test("static model catalog provider rows come from the provider catalog", async 
     },
   });
   const rows = await catalog.staticCatalog();
-  assert.ok(rows.some((row) => row.model === "gemini-3.1-pro" && row.default === true && row.source === "static"));
+  assert.ok(rows.some((row) => row.model === "gemini-3.8-flash" && row.default === true && row.source === "static"));
   assert.ok(rows.every((row) => row.kind === "text" && row.provider === "antigravity-cli"));
 });
 
@@ -1052,6 +1072,31 @@ test("live catalog does not publish the static snapshot when agy cannot list mod
     (await provider.staticCatalog.run()).provider.models.map((model) => model.id),
     ANTIGRAVITY_MODEL_IDS,
   );
+});
+
+test("live discovery accepts an unfamiliar model and its reported effort levels", async () => {
+  const effortStore = createAntigravityEffortStore();
+  const provider = buildAntigravityProvider({}, {
+    effortStore,
+    runCommand: async () => "gemini-future-test-low\tFuture Model Low\ngemini-future-test-high\tFuture Model High\n",
+  });
+  const result = await provider.catalog.run({ config: {}, env: {} });
+  assert.deepEqual(result.provider.models.map((model) => model.id), ["gemini-future-test"]);
+  assert.equal(result.provider.defaultModel, "gemini-future-test");
+  assert.deepEqual(antigravityEffortLevels("gemini-future-test", effortStore), ["low", "high"]);
+  assert.ok(!ANTIGRAVITY_MODEL_IDS.includes("gemini-future-test"));
+});
+
+test("bare unfamiliar models omit effort and suffixed rows win in either order", () => {
+  const model = "gemini-future-test";
+  const store = createAntigravityEffortStore();
+  recordAntigravityModelEfforts([model], store);
+  assert.deepEqual(antigravityEffortLevels(model, store), []);
+  assert.equal(resolveAntigravityEffort(model, "high", store), undefined);
+  for (const ids of [[model, `${model}-high`], [`${model}-high`, model]]) {
+    recordAntigravityModelEfforts(ids, store);
+    assert.deepEqual(antigravityEffortLevels(model, store), ["high"]);
+  }
 });
 
 test("cli provider does not register usage hooks", () => {

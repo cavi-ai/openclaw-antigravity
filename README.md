@@ -16,7 +16,7 @@ ingests and serves at [cavi-ai.xyz/docs/antigravity](https://cavi-ai.xyz/docs/an
 
 ## Requirements
 
-- OpenClaw 2026.9.6 or newer
+- OpenClaw 2026.10.2 or newer
 - Node.js 24.16 or newer, or Node.js 26.1 or newer
 - Antigravity CLI 1.2.1 or newer, installed and signed in
 
@@ -39,30 +39,32 @@ Restart the OpenClaw Gateway after installation.
 
 In the Control UI, open **Models → Providers** and choose **Reconnect** on the
 Antigravity CLI card. The plugin asks `agy` whether its login is usable and
-writes the `agy models` rows onto the provider. The login stays in `agy`. The
-plugin does not write an API key, and it does not copy the Antigravity access
-token, refresh token, or access-token expiry. It does not change the default
-model.
+writes the `agy models` rows onto the provider. OpenClaw saves a non-secret
+reference to the native login. The access token, refresh token, and expiry stay
+in `agy`. OpenClaw controls model selection and replacement confirmation.
 Reconnect installs or refreshes the bundled `openclaw-antigravity-tool-free`
 agy plugin. Its agent id is `openclaw-antigravity-setup`, which OpenClaw uses
 only for its connection probe. Normal provider turns keep the configured `agy`
 mode and tool behavior.
 
+Connection checks use the provider's native AGY completion transport. They test
+the CLI-owned login and reject supplied API tokens that AGY cannot validate.
+
 Thinking level is a separate param and is passed as `agy --effort`, limited
 to the levels `agy models` lists for that model: `low`/`medium`/`high` for
-Gemini Flash, `low`/`high` for Gemini 3.1 Pro, `medium` for GPT-OSS. `agy`
+Gemini Flash and Claude 5.5, `medium` for GPT-OSS. `agy`
 requires the flag on those models, so `off` sends the lowest listed level.
 An unlisted level sends the nearest listed level, and a tie sends the lower
 one. When no level is selected, the default is `medium` if that model lists
-it, otherwise the lowest listed level. Claude models reject `--effort`, so
-the flag is omitted for them.
+it, otherwise the lowest listed level. Legacy Claude 4.6 models reject
+`--effort`, so the flag is omitted for them.
 
 ## Use
 
 Models use the `antigravity-cli/<model>` format:
 
 ```bash
-openclaw agent --model antigravity-cli/gemini-3.1-pro -m "hello"
+openclaw agent --model antigravity-cli/gemini-3.8-flash -m "hello"
 ```
 
 ### Models
@@ -72,15 +74,14 @@ model ids. The static fallback snapshot is:
 
 | Model | Alias |
 | --- | --- |
-| `gemini-3.8-flash` | `flash`, `flash-lite` |
-| `gemini-3.7-flash` | |
-| `gemini-3.6-flash` | |
-| `gemini-3.1-pro` | `pro` (default) |
-| `claude-sonnet-4-6` | `sonnet` |
-| `claude-opus-4-6` | `opus` |
+| `gemini-3.8-flash` | `flash`, `flash-lite` (default) |
+| `claude-opus-5-5` | `opus` |
+| `claude-sonnet-5-5` | `sonnet` |
 | `gpt-oss-120b` | `gpt-oss` |
 
 New model IDs that are not yet in the catalog are passed through to `agy`.
+The legacy `pro` alias still expands to `gemini-3.1-pro`; use it only if
+that model appears in your live catalog.
 
 ## OpenClaw and MCP commands
 

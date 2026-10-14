@@ -41,10 +41,10 @@ test("release identity follows npm and OpenClaw compatibility contracts", async 
   assert.ok(changelog.includes(`## ${pkg.version}`));
   assert.equal(NPM_PACKAGE_NAME, pkg.name);
   assert.equal(pkg.repository.url, "git+https://github.com/cavi-ai/openclaw-antigravity.git");
-  assert.equal(pkg.peerDependencies.openclaw, ">=2026.9.6");
-  assert.equal(pkg.openclaw.install.minHostVersion, ">=2026.9.6");
-  assert.equal(pkg.openclaw.compat.pluginApi, ">=2026.9.6");
-  assert.equal(pkg.openclaw.compat.minGatewayVersion, "2026.9.6");
+  assert.equal(pkg.peerDependencies.openclaw, ">=2026.10.2");
+  assert.equal(pkg.openclaw.install.minHostVersion, ">=2026.10.2");
+  assert.equal(pkg.openclaw.compat.pluginApi, ">=2026.10.2");
+  assert.equal(pkg.openclaw.compat.minGatewayVersion, "2026.10.2");
 });
 
 test("navigation references every official source page exactly once", async () => {
@@ -85,9 +85,9 @@ test("official docs cover install, compatibility, ownership, doctor, and auth re
   const text = pages.map((page) => stampReleaseTokens(page, release)).join("\n");
   for (const phrase of [
     "npm install -g @cavi-ai/antigravity",
-    "OpenClaw `2026.9.6`",
-    "Gateway `2026.9.6`",
-    "plugin API `2026.9.6`",
+    "OpenClaw `2026.10.2`",
+    "Gateway `2026.10.2`",
+    "plugin API `2026.10.2`",
     "antigravity-cli/<model>",
     "`agy` owns inference and authentication",
     "stores no API key",
