@@ -1055,6 +1055,7 @@ test("live catalog uses the models currently reported by agy", async () => {
     ["gemini-3.8-flash", "claude-sonnet-4-6"],
   );
   assert.equal(result.provider.defaultModel, "gemini-3.8-flash");
+  assert.deepEqual(result.outcomes, [{ provider: "antigravity-cli", status: "ready", modelOrder: ["gemini-3.8-flash", "claude-sonnet-4-6"] }]);
 });
 
 test("live catalog does not publish the static snapshot when agy cannot list models", async () => {
@@ -1066,12 +1067,23 @@ test("live catalog does not publish the static snapshot when agy cannot list mod
       },
     },
   );
-  assert.equal(await provider.catalog.run({ config: {}, env: {} }), undefined);
+  await assert.rejects(provider.catalog.run({ config: {}, env: {} }), { code: "ANTIGRAVITY_CATALOG_UNAVAILABLE" });
   assert.deepEqual(await loadAntigravityLiveCatalog(provider, { config: {}, env: {} }), []);
   assert.deepEqual(
     (await provider.staticCatalog.run()).provider.models.map((model) => model.id),
     ANTIGRAVITY_MODEL_IDS,
   );
+});
+
+test("empty discovery remains unavailable and aborts propagate through both catalog surfaces", async () => {
+  const empty = buildAntigravityProvider({}, { runCommand: async () => "No available models\n" });
+  await assert.rejects(empty.catalog.run({}), { code: "ANTIGRAVITY_CATALOG_UNAVAILABLE" });
+  assert.deepEqual(await loadAntigravityLiveCatalog(empty, {}), []);
+  const reason = new Error("Cancelled discovery");
+  const controller = new AbortController();
+  controller.abort(reason);
+  await assert.rejects(empty.catalog.run({ signal: controller.signal }), error => error === reason);
+  await assert.rejects(loadAntigravityLiveCatalog(empty, { signal: controller.signal }), error => error === reason);
 });
 
 test("live discovery accepts an unfamiliar model and its reported effort levels", async () => {

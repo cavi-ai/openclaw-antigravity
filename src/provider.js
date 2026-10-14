@@ -2,8 +2,8 @@
 //
 // agy owns the user's Antigravity OAuth session. Guided discovery/reconnect
 // asks agy whether that session is usable, the same way Claude CLI and Codex
-// report their own logins. OpenClaw does not store an Antigravity auth profile,
-// access token, refresh token, access-token expiry, or a provider API key.
+// report their own logins. OpenClaw stores a non-secret native-login profile;
+// AGY retains access tokens, refresh tokens, and their expiry.
 import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +36,7 @@ import {
 } from "./session.js";
 
 export const ANTIGRAVITY_PROVIDER_ID = ANTIGRAVITY_BACKEND_ID;
+export const ANTIGRAVITY_CATALOG_UNAVAILABLE = "ANTIGRAVITY_CATALOG_UNAVAILABLE";
 
 const ANTIGRAVITY_OPENCLAW_CONTEXT = [
   "You are running through OpenClaw's Antigravity CLI model provider.",
@@ -388,6 +389,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
           const modelIds = await listModels(context);
           if (modelIds.length > 0) {
             return {
+              outcomes: [{ provider: ANTIGRAVITY_PROVIDER_ID, status: "ready", modelOrder: modelIds }],
               provider: {
                 baseUrl: ANTIGRAVITY_BASE_URL,
                 api: ANTIGRAVITY_MODEL_API,
@@ -403,7 +405,9 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
         }
         // The host static catalog is the fallback. Returning it here would
         // label the snapshot as a live listing.
-        return undefined;
+        // A thrown discovery failure lets the host record unavailable and use
+        // its static fallback, rather than treating an empty result as no hook.
+        throw Object.assign(new Error("Antigravity live model discovery is unavailable. Run agy models to check the native login."), { code: ANTIGRAVITY_CATALOG_UNAVAILABLE });
       },
     },
     staticCatalog: {

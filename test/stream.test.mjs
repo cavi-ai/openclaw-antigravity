@@ -90,6 +90,14 @@ test("transport sends oversized composed prompts through stdin and reports spawn
   await assert.rejects(collect("", { command: "/missing-agy-fixture" }), { code: "ENOENT" });
 });
 
+test("transport measures composed Unicode prompts in UTF-8 bytes for stdin routing", async () => {
+  const script = `let text='';process.stdin.setEncoding('utf8');process.stdin.on('data',s=>text+=s);process.stdin.on('end',()=>console.log(JSON.stringify({event:'result',result:{status:'SUCCESS',response:JSON.stringify({stdinBytes:Buffer.byteLength(text),argv:process.argv.slice(1)})}})));`;
+  const events = await collect(script, { args: ["-e", script, "--", "--print", "{prompt}", "--output-format", "stream-json"], prompt: "界".repeat(20_000), systemPrompt: "界".repeat(12_001) });
+  const result = JSON.parse(events[0].result.response);
+  assert.equal(result.stdinBytes, 96_005);
+  assert.deepEqual(result.argv, ["--print", "--output-format", "stream-json"]);
+});
+
 test("resumed usage counts the current response steps once rather than the whole conversation", async () => {
   const update = { event: "step_update", step_update: { conversation_id: "conversation-1", step_index: 7, step_type: "agent_response", state: "DONE", usage: { input_tokens: 12, output_tokens: 3, thinking_tokens: 1, cache_read_tokens: 5, total_tokens: 15 } } };
   const final = { event: "result", result: { conversation_id: "conversation-1", status: "SUCCESS", response: "reply", num_turns: 2, usage: { input_tokens: 112, output_tokens: 23, thinking_tokens: 4, cache_read_tokens: 50, total_tokens: 135 } } };

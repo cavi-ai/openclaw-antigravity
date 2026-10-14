@@ -1,6 +1,6 @@
 import { buildAntigravityCliBackend } from "./cli-backend.js";
 import { createAntigravityEffortStore } from "./models.js";
-import { ANTIGRAVITY_PROVIDER_ID, buildAntigravityProvider } from "./provider.js";
+import { ANTIGRAVITY_CATALOG_UNAVAILABLE, ANTIGRAVITY_PROVIDER_ID, buildAntigravityProvider } from "./provider.js";
 
 /**
  * Control-plane catalog rows. `catalog` / `staticCatalog` remain the text
@@ -33,8 +33,13 @@ export function unifiedAntigravityCatalog(result, source) {
 }
 
 export async function loadAntigravityLiveCatalog(provider, ctx) {
-  const result = await provider.catalog.run(ctx);
-  return result ? unifiedAntigravityCatalog(result, "live") : [];
+  try {
+    const result = await provider.catalog.run(ctx);
+    return result ? unifiedAntigravityCatalog(result, "live") : [];
+  } catch (error) {
+    if (error?.code !== ANTIGRAVITY_CATALOG_UNAVAILABLE || ctx?.signal?.aborted) throw error;
+    return [];
+  }
 }
 
 /** Shared by the runtime entry and the package-root setup entry. */
