@@ -4,6 +4,8 @@
 
 ## 0.5.1
 
+- Route oversized Unicode prompts through stdin using their UTF-8 byte size.
+- Report live catalog availability without presenting fallback models as live discovery.
 - Use the native AGY completion transport for connection checks through the provider SDK. Require OpenClaw 2026.10.2 or newer.
 - Reject supplied API tokens that cannot be checked through AGY's native login.
 - Preserve saved connection bindings and register a non-secret native-login profile on Reconnect.
@@ -26,7 +28,6 @@
 - On resume, count usage from this turn's response and tool steps. Omit usage when a resumed turn has no per-step usage. Map thinking tokens to `reasoningTokens`.
 - Keep provider CLI guidance off side-question probes. Name OpenClaw as the owner of the MCP servers in that guidance.
 - Document catalog cost as zero unless the Google provider has a positive rate for the same model id.
-- Doctor removes auth profiles for every declared Antigravity prefix. A non-marker apiKey stays.
 
 ## 0.5.0
 

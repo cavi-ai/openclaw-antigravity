@@ -3,7 +3,9 @@ import { join } from "node:path";
 
 const MAX_LINE_CHARS = 1_048_576;
 const STDERR_TAIL_CHARS = 16_384;
-export const MAX_PROMPT_ARG_CHARS = 96_000;
+export const MAX_PROMPT_ARG_BYTES = 96_000;
+// Retain the host's character preflight cap; native execution also checks bytes.
+export const MAX_PROMPT_ARG_CHARS = MAX_PROMPT_ARG_BYTES;
 
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -118,7 +120,7 @@ export async function* executeAntigravityStream(context) {
   let usesStdin = false;
   if (printIndex >= 0) {
     const hasArgPrompt = args[printIndex + 1] !== "--output-format" && args[printIndex + 1] !== undefined;
-    usesStdin = prompt.length > MAX_PROMPT_ARG_CHARS;
+    usesStdin = Buffer.byteLength(prompt, "utf8") > MAX_PROMPT_ARG_BYTES;
     args.splice(printIndex + 1, hasArgPrompt ? 1 : 0, ...(usesStdin ? [] : [prompt]));
   }
   const child = spawn(context.command, args, {
