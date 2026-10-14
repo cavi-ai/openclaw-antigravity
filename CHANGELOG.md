@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.5.1
+
+- Use the native AGY completion transport for connection checks through the provider SDK. Require OpenClaw 2026.10.2 or newer.
+- Reject supplied API tokens that cannot be checked through AGY's native login.
+- Preserve saved connection bindings and register a non-secret native-login profile on Reconnect.
+- Strip auth-profile suffixes before passing model ids and effort settings to AGY.
+- Refresh current model defaults and aliases, support Claude 5.5 effort levels, and accept unfamiliar models from live discovery.
+- Run integration checks with live model ids and isolated provider credentials and state.
+
 - A failed `agy models` call does not publish the static snapshot as a live catalog.
 - Keep stderr when a zero exit has no terminal result. Command errors include later output lines.
 - Resolve `agy` and prepend `~/.local/bin` on each turn.
@@ -10,10 +19,10 @@
 - Keep the effort snapshot when a live model row has no effort suffix. Effort state is per provider registration.
 - Unlisted thinking levels tie toward the lower level. The unset default is medium, otherwise the lowest listed level.
 - Share one prompt-size cutoff between argv and stdin.
-- Record catalog api `pi-messages`. Doctor rewrites a stored `openai-completions` value. Claude rows set reasoning off.
-- Doctor keeps auth profiles that name another provider.
+- Record catalog api `pi-messages`. Doctor rewrites a stored `openai-completions` value. Legacy Claude 4.6 rows set reasoning off.
+- Doctor preserves saved auth profiles and their configured order.
 - Reconnect names the failing step. Guided prepare reports a CLI older than 1.2.1.
-- Pass listed effort levels through to `agy --effort`, including levels outside low, medium, and high. Claude's thinking profile is off only.
+- Pass listed effort levels through to `agy --effort`, including levels outside low, medium, and high. Legacy Claude 4.6's thinking profile is off only.
 - On resume, count usage from this turn's response and tool steps. Omit usage when a resumed turn has no per-step usage. Map thinking tokens to `reasoningTokens`.
 - Keep provider CLI guidance off side-question probes. Name OpenClaw as the owner of the MCP servers in that guidance.
 - Document catalog cost as zero unless the Google provider has a positive rate for the same model id.

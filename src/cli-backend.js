@@ -190,7 +190,7 @@ export function buildAntigravityCliBackend(options = {}, effortStore) {
     }),
     resolveExecutionArgs: ({ baseArgs, executionMode, thinkingLevel, modelId }) => {
       // agy requires `--effort` on models with effort rows, including the
-      // setup probe, and rejects it on Claude.
+      // setup probe. Legacy models without effort rows omit the flag.
       const args = resolveAntigravityEffortArgs(
         baseArgs,
         resolveAntigravityEffort(modelId, thinkingLevel, effortStore),

@@ -8,6 +8,7 @@ import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { createAntigravityCompletionStream } from "./completion.js";
 import {
   ANTIGRAVITY_BACKEND_ID,
   buildAntigravityCommandEnv,
@@ -27,6 +28,8 @@ import {
   recordAntigravityModelEfforts,
 } from "./models.js";
 import {
+  ANTIGRAVITY_NATIVE_AUTH_MARKER,
+  ANTIGRAVITY_NATIVE_PROFILE_ID,
   antigravityNativeAuthResult,
   isAntigravityAuthMarker,
   shouldDeferAntigravitySyntheticProfileAuth,
@@ -173,6 +176,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
   const command = options.command?.trim() || "agy";
   const execute = dependencies.runCommand ?? runCommand;
   const effortStore = dependencies.effortStore;
+  const completionStream = createAntigravityCompletionStream(options, effortStore, dependencies.executeStream);
   let liveModelCache = { at: 0, ids: [] };
 
   const listModels = async (context = {}) => {
@@ -274,11 +278,14 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     };
   };
 
-  // An empty profile list keeps the host from writing an auth profile. agy owns
-  // the login; `prepareSyntheticAuth` reports whether that login is usable.
+  // The host needs a selectable profile for native connection probes. Its
+  // non-secret marker refers to AGY's login; AGY retains every real credential.
   const validatedResult = (modelRef, config, modelIds) => {
     return {
-      profiles: [],
+      profiles: [{
+        profileId: ANTIGRAVITY_NATIVE_PROFILE_ID,
+        credential: { type: "api_key", provider: ANTIGRAVITY_PROVIDER_ID, key: ANTIGRAVITY_NATIVE_AUTH_MARKER },
+      }],
       defaultModel: modelRef,
       configPatch: buildConnectionPatch(config, modelIds),
     };
@@ -291,6 +298,7 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
     // `antigravity` then appear beside `antigravity-cli`, each with the same
     // models and an API-key card.
     envVars: [],
+    createStreamFn: () => completionStream,
     auth: [
       {
         id: "cli",
@@ -431,7 +439,10 @@ export function buildAntigravityProvider(options = {}, dependencies = {}) {
         return null;
       }
       const aliased = ANTIGRAVITY_MODEL_ALIASES[modelId] ?? modelId;
-      const resolved = openClawModelId(aliased.replace(/-thinking$/u, ""));
+      // The host requires its requested id during auth-scoped materialization.
+      // Only the native transport strips the host's profile suffix.
+      const profileQualified = aliased.includes("@");
+      const resolved = profileQualified ? aliased : openClawModelId(aliased.replace(/-thinking$/u, ""));
       return {
         id: resolved,
         provider: ANTIGRAVITY_PROVIDER_ID,

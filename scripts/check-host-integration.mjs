@@ -12,9 +12,16 @@ import { parseAntigravityModelIds } from "../src/provider.js";
 const PROVIDER_ID = "antigravity-cli";
 const CHOICE_ID = "antigravity-cli";
 const ACTION_LABEL = "Reconnect";
-const MIN_HOST_VERSION = [2026, 9, 6];
+const MIN_HOST_VERSION = [2026, 10, 2];
 const COMMAND_TIMEOUT_MS = 30_000;
-const STARTUP_TIMEOUT_MS = 20_000;
+const STARTUP_TIMEOUT_MS = 60_000;
+
+/** Only host execution settings cross into the disposable provider check. */
+export function buildIsolatedHostEnv(source = process.env) {
+  return Object.fromEntries(Object.entries(source).filter(([key]) =>
+    /^(PATH|PATHEXT|SystemRoot|SYSTEMROOT|WINDIR|COMSPEC|TMPDIR|TMP|TEMP|LANG|LC_.*|TZ|SSL_CERT_FILE|SSL_CERT_DIR|NODE_EXTRA_CA_CERTS|HTTPS?_PROXY|ALL_PROXY|NO_PROXY|https?_proxy|all_proxy|no_proxy)$/u.test(key),
+  ));
+}
 
 function fail(message) {
   throw new Error(`Host integration check failed: ${message}`);
@@ -168,21 +175,23 @@ async function delay(milliseconds) {
 
 async function waitForGateway(openclaw, gatewayUrl, token, env, child, diagnostics) {
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+  let lastError = "";
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
       fail(`the isolated OpenClaw gateway exited early${diagnostics()}`);
     }
     try {
-      parseJsonOutput(openclaw, buildGatewayCallArgs("health", gatewayUrl, token, 1_000), {
+      parseJsonOutput(openclaw, buildGatewayCallArgs("health", gatewayUrl, token, 3_000), {
         env,
-        timeout: 2_000,
+        timeout: 10_000,
       });
       return;
-    } catch {
+    } catch (error) {
+      lastError = String(error?.stderr || error?.stdout || error?.message || error).replaceAll(token, "[redacted]").slice(-2_000);
       await delay(250);
     }
   }
-  fail(`the isolated OpenClaw gateway did not become ready within ${STARTUP_TIMEOUT_MS}ms${diagnostics()}`);
+  fail(`the isolated OpenClaw gateway did not become ready within ${STARTUP_TIMEOUT_MS}ms\nLast health check: ${lastError}${diagnostics()}`);
 }
 
 async function stopGateway(child) {
@@ -233,7 +242,7 @@ export async function runHostIntegrationCheck({
       const gatewayUrl = `ws://127.0.0.1:${port}`;
       const gatewayToken = randomBytes(24).toString("hex");
       const env = {
-        ...process.env,
+        ...buildIsolatedHostEnv(),
         HOME: isolatedHome,
         USERPROFILE: isolatedHome,
         OPENCLAW_HOME: isolatedHome,
@@ -252,7 +261,9 @@ export async function runHostIntegrationCheck({
           `${JSON.stringify(
             {
               gateway: { mode: "local", bind: "loopback", auth: { mode: "token" } },
-              agents: { defaults: { workspace: join(tempRoot, "stream-workspace") } },
+              agents: { defaults: {
+                workspace: join(tempRoot, "stream-workspace"),
+              } },
               plugins: {
                 allow: ["antigravity"],
                 load: { paths: [pluginRoot] },
@@ -288,7 +299,7 @@ export async function runHostIntegrationCheck({
 
         await waitForGateway(openclaw, gatewayUrl, gatewayToken, env, gateway, diagnostics);
         if (!checkReconnect) {
-          const runtime = await verifyRuntime({ gatewayUrl, gatewayToken, env, tempRoot });
+          const runtime = await verifyRuntime({ gatewayUrl, gatewayToken, env, tempRoot, modelIds });
           return {
             pluginVersion: packageJson.version,
             hostVersion: hostVersion.join("."),
@@ -321,8 +332,23 @@ export async function runHostIntegrationCheck({
           ),
           candidate,
         );
+        const probe = parseJsonOutput(
+          openclaw,
+          buildGatewayCallArgs("models.probe", gatewayUrl, gatewayToken, 60_000, {
+            provider: PROVIDER_ID, timeoutMs: 60_000,
+          }),
+          { env, timeout: 65_000 },
+        );
+        if (probe.status !== "ok") {
+          await stopGateway(gateway);
+          const cliStatus = parseJsonOutput(openclaw, ["models", "status", "--json", "--probe", "--probe-provider", PROVIDER_ID, "--probe-timeout", "30000"], { env, timeout: 60_000 });
+          fail(`the connection check returned ${probe.status}: ${probe.error ?? "no successful target"}; RPC results: ${JSON.stringify(probe.results ?? [])}; CLI results: ${JSON.stringify(cliStatus.auth?.probes?.results ?? [])}`);
+        }
+        if (!(probe.latencyMs > 0)) {
+          fail("the connection check did not report a positive request round-trip");
+        }
         const runtime = verifyRuntime
-          ? await verifyRuntime({ gatewayUrl, gatewayToken, env, tempRoot })
+          ? await verifyRuntime({ gatewayUrl, gatewayToken, env, tempRoot, modelIds })
           : undefined;
         return {
           pluginVersion: packageJson.version,
@@ -330,9 +356,15 @@ export async function runHostIntegrationCheck({
           agyModelCount: modelIds.length,
           action,
           activation,
+          probe,
           ...(runtime ? { runtime } : {}),
         };
       } catch (error) {
+        if (gateway && error.message.includes("Reconnect activation failed")) {
+          await stopGateway(gateway);
+          const cliStatus = parseJsonOutput(openclaw, ["models", "status", "--json", "--probe", "--probe-provider", PROVIDER_ID, "--probe-timeout", "30000"], { env, timeout: 60_000 });
+          throw new Error(`${error.message}; results: ${JSON.stringify(cliStatus.auth?.probes?.results ?? [])}`, { cause: error });
+        }
         throw new Error(`${error.message}${boundedDiagnostics(gatewayOutput)}`, { cause: error });
       } finally {
         if (gateway) await stopGateway(gateway);
@@ -351,6 +383,7 @@ if (isMain) {
           `live agy models: ${result.agyModelCount}`,
           `host action: ${result.action.actionLabel}`,
           `Reconnect activation: ${result.activation.modelRef}`,
+          `connection check: ${result.probe.status} (${result.probe.latencyMs ?? "unreported"} ms)`,
           "credential-only Connect: absent",
         ].join("\n") + "\n",
       );
