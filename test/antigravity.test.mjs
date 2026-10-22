@@ -396,10 +396,10 @@ test("backend serializes runs so concurrent turns cannot interleave one conversa
   assert.equal(buildAntigravityCliBackend().config.serialize, true);
 });
 
-test("backend owns direct antigravity-cli/<model> refs rather than aliasing a provider", () => {
+test("backend binds antigravity-cli/<model> refs to its own provider id", () => {
   const backend = buildAntigravityCliBackend();
   assert.equal(backend.id, "antigravity-cli");
-  assert.equal(backend.modelProvider, undefined);
+  assert.equal(backend.modelProvider, "antigravity-cli");
 });
 
 test("backend exposes short model aliases agy itself does not accept", () => {

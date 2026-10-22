@@ -165,6 +165,8 @@ export function buildAntigravityCliBackend(options = {}, effortStore) {
   const command = resolveAntigravityCommand(options.command?.trim() || DEFAULT_COMMAND);
   return {
     id: ANTIGRAVITY_BACKEND_ID,
+    // Models are antigravity-cli/<model>, so this backend's id is the canonical provider.
+    modelProvider: ANTIGRAVITY_BACKEND_ID,
     // Stock CLI runtime-artifact policy. A native agy binary is admitted through
     // nativeExecutableNames. packageName is read only when the command is a
     // script whose package.json owns the tree.
@@ -200,9 +202,6 @@ export function buildAntigravityCliBackend(options = {}, effortStore) {
         : args;
     },
     resolveModelId: ({ modelId }) => resolveAntigravityTransportModelId(modelId),
-    // Standalone backend: omit modelProvider. Setting it, even to this backend's
-    // own id, registers a CLI runtime alias and the model picker hides the provider.
-    // Direct `antigravity-cli/<model>` refs stay selectable.
     config: {
       command,
       args: [...base],

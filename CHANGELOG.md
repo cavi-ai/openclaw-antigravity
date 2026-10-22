@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.2
+
+- Bind the `antigravity-cli` backend to provider id `antigravity-cli`.
+
 ## 0.5.1
 
 - Route oversized Unicode prompts through stdin using their UTF-8 byte size.
