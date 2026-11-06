@@ -17,7 +17,7 @@ ingests and serves at [cavi-ai.xyz/docs/antigravity](https://cavi-ai.xyz/docs/an
 ## Requirements
 
 - OpenClaw 2026.10.2 or newer
-- Node.js 24.16 or newer, or Node.js 26.1 or newer
+- Node.js `>=24.16.0 <25` or `>=26.1.0` (matching the package's engine range)
 - Antigravity CLI 1.2.1 or newer, installed and signed in
 
 Confirm that Antigravity is ready:
